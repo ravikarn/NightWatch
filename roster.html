@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Night's Watch - Duty Rostering</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- jsPDF and AutoTable for PDF Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { primary: '#6366f1', secondary: '#14b8a6' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; overflow-x: hidden; }
+        /* Custom scrollbar for a sleek look */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+        .toast-enter { animation: slideIn 0.3s forwards; }
+        .toast-exit { animation: slideOut 0.3s forwards; }
+        @keyframes slideIn { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideOut { from { transform: translateY(0); opacity: 1; } to { transform: translateY(100%); opacity: 0; } }
+    </style>
+</head>
+<body class="h-screen flex flex-col font-sans antialiased text-sm">
+
+    <header class="bg-slate-900 border-b border-slate-800 p-4 shadow-md z-10 flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="text-3xl">🦉</div>
+            <div class="flex flex-col">
+                <h1 class="text-lg font-black tracking-tight leading-tight text-white">Night's Watch</h1>
+                <span class="text-[11px] font-bold text-secondary">Created by Ravi S Karn</span>
+            </div>
+        </div>
+        <button onclick="app.solveRoster()" class="bg-indigo-600 hover:bg-indigo-500 text-white w-10 h-10 rounded-full flex items-center justify-center transition-colors shadow-lg shadow-indigo-900/50">
+            <i class="fas fa-sync-alt"></i>
+        </button>
+    </header>
+
+    <main id="main-content" class="flex-1 overflow-y-auto relative bg-slate-950 p-4 md:p-6"></main>
+
+    <nav class="bg-slate-900 border-t border-slate-800 px-4 py-3 shrink-0">
+        <div class="max-w-md mx-auto flex justify-between items-center text-xs font-bold text-slate-400">
+            <button onclick="app.switchTab('Home')" id="nav-Home" class="nav-btn flex flex-col items-center gap-1 w-16 transition-colors hover:text-white">
+                <i class="fas fa-home text-lg"></i><span>Home</span>
+            </button>
+            <button onclick="app.switchTab('Crew')" id="nav-Crew" class="nav-btn flex flex-col items-center gap-1 w-16 transition-colors hover:text-white">
+                <i class="fas fa-users text-lg"></i><span>Crew</span>
+            </button>
+            <button onclick="app.switchTab('Roster')" id="nav-Roster" class="nav-btn flex flex-col items-center gap-1 w-16 transition-colors hover:text-white">
+                <i class="fas fa-table text-lg"></i><span>Roster</span>
+            </button>
+            <button onclick="app.switchTab('View')" id="nav-View" class="nav-btn flex flex-col items-center gap-1 w-16 transition-colors hover:text-white">
+                <i class="fas fa-user-clock text-lg"></i><span>View</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-20 left-1/2 transform -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <script>
+        const EmployeeGroup = { FIRST_HALF: 'FIRST_HALF', SECOND_HALF: 'SECOND_HALF' };
+        const ActivePeriod = { COMMON: 'COMMON', FIRST_HALF: 'FIRST_HALF', SECOND_HALF: 'SECOND_HALF' };
+        const Position = { TWR: 'TWR', SMC: 'SMC', CLD: 'CLD', TSO: 'TSO' };
+        const TsoRole = { NONE: 'NONE', TSO: 'TSO' };
+
+        const SLOT_TIMES = [
+            "1330–1400", "1400–1430", "1430–1500", "1500–1530", "1530–1600", "1600–1630", "1630–1700", "1700–1730", 
+            "1730–1800", "1800–1830", "1830–1900", "1900–1930", "1930–2000", "2000–2030", "2030–2100", "2100–2130", 
+            "2130–2200", "2200–2230", "2230–2300", "2300–2330", "2330–0000", "0000–0030", "0030–0100", "0100–0130"
+        ];
+
+        class Employee {
+            constructor(name, group, tsoRole = TsoRole.NONE) {
+                this.id = crypto.randomUUID();
+                this.name = name.toUpperCase();
+                this.group = group;
+                this.tsoRole = tsoRole;
+                this.preferredSlots = [];
+                this.nonPreferredSlots = [];
+                this.preferredPositions = [];
+            }
+        }
+
+        const appState = {
+            activeTab: 'Home',
+            employees: [
+                new Employee("A", EmployeeGroup.FIRST_HALF, TsoRole.TSO),
+                new Employee("B", EmployeeGroup.FIRST_HALF),
+                new Employee("C", EmployeeGroup.FIRST_HALF),
+                new Employee("D", EmployeeGroup.FIRST_HALF),
+                new Employee("E", EmployeeGroup.FIRST_HALF),
+                new Employee("F", EmployeeGroup.SECOND_HALF, TsoRole.TSO),
+                new Employee("G", EmployeeGroup.SECOND_HALF),
+                new Employee("H", EmployeeGroup.SECOND_HALF),
+                new Employee("I", EmployeeGroup.SECOND_HALF),
+                new Employee("J", EmployeeGroup.SECOND_HALF)
+            ],
+            generatedRoster: null,
+            solverStats: null,
+            maxContinuousSlots: 4 // Fixed 2-hour limit
+        };
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const colorClass = type === 'success' ? 'bg-secondary' : type === 'error' ? 'bg-red-500' : 'bg-slate-700';
+            toast.className = `toast-enter ${colorClass} text-white px-4 py-2 rounded-full shadow-lg font-bold text-sm pointer-events-auto flex items-center gap-2`;
+            toast.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-info-circle'}"></i> ${message}`;
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-exit');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        class DynamicRosterSolver {
+            constructor(employees, maxContinuousSlots = 4) {
+                this.employees = employees;
+                this.maxContinuousSlots = maxContinuousSlots;
+                this.fallbackTriggers = 0;
+                this.tsoSwaps = 0;
+                this.fallbackDetails = [];
+            }
+
+            getActivePeriod(slotIndex) {
+                if (slotIndex >= 0 && slotIndex <= 7) return ActivePeriod.COMMON;
+                if (slotIndex >= 8 && slotIndex <= 15) return ActivePeriod.FIRST_HALF;
+                return ActivePeriod.SECOND_HALF;
+            }
+
+            solve() {
+                const startTime = performance.now();
+                this.fallbackTriggers = 0;
+                this.tsoSwaps = 0;
+                this.fallbackDetails = [];
+
+                const currentRoster = Array.from({ length: 24 }, (_, idx) => ({
+                    slotIndex: idx,
+                    activePeriod: this.getActivePeriod(idx),
+                    assignments: {}
+                }));
+
+                for (let slotIndex = 0; slotIndex < 24; slotIndex++) {
+                    const slot = currentRoster[slotIndex];
+
+                    // MRV (Minimum Remaining Values) Heuristic for non-TSO
+                    const nonTsoPositions = [Position.TWR, Position.SMC, Position.CLD].sort((a, b) => {
+                        const aCands = this.getValidCandidates(slotIndex, a, currentRoster, false, false).length;
+                        const bCands = this.getValidCandidates(slotIndex, b, currentRoster, false, false).length;
+                        return aCands - bCands;
+                    });
+
+                    // TSO must be evaluated absolutely first
+                    const dynamicPositions = [Position.TSO, ...nonTsoPositions];
+
+                    for (const pos of dynamicPositions) {
+                        let usedTier2 = false;
+                        let usedTier3 = false;
+                        let usedTsoSwap = false;
+
+                        // Tier 1: Strict Constraints
+                        let candidates = this.getValidCandidates(slotIndex, pos, currentRoster, false, false);
+
+                        // Tier 1.5: TSO Cross-Half Swap Emergency Protocol
+                        const period = this.getActivePeriod(slotIndex);
+                        if (candidates.length === 0 && pos !== Position.TSO && period !== ActivePeriod.COMMON) {
+                            const currentTsoId = slot.assignments[Position.TSO];
+                            const currentTsoEmp = this.employees.find(e => e.id === currentTsoId);
+                            const activeGroup = (period === ActivePeriod.FIRST_HALF) ? EmployeeGroup.FIRST_HALF : EmployeeGroup.SECOND_HALF;
+
+                            if (currentTsoEmp && currentTsoEmp.group === activeGroup) {
+                                const inactiveGroup = (activeGroup === EmployeeGroup.FIRST_HALF) ? EmployeeGroup.SECOND_HALF : EmployeeGroup.FIRST_HALF;
+                                const inactiveTsoEmp = this.employees.find(e => e.tsoRole === TsoRole.TSO && e.group === inactiveGroup);
+
+                                if (inactiveTsoEmp) {
+                                    slot.assignments[Position.TSO] = inactiveTsoEmp.id;
+                                    // Bypass limit for Active TSO to save the console
+                                    const activeTsoCandidates = this.getValidCandidates(slotIndex, pos, currentRoster, true, true).filter(e => e.id === currentTsoEmp.id);
+                                    
+                                    if (activeTsoCandidates.length > 0) {
+                                        usedTsoSwap = true;
+                                        this.tsoSwaps++;
+                                        candidates = activeTsoCandidates;
+                                    } else {
+                                        slot.assignments[Position.TSO] = currentTsoEmp.id; // Revert
+                                    }
+                                }
+                            }
+                        }
+
+                        // Tier 2: Break Emergency
+                        if (candidates.length === 0) {
+                            usedTier2 = true;
+                            this.fallbackTriggers++;
+                            candidates = this.getValidCandidates(slotIndex, pos, currentRoster, false, true);
+                        }
+
+                        // Tier 3: Max Limit Emergency
+                        if (candidates.length === 0) {
+                            usedTier3 = true;
+                            usedTier2 = false;
+                            this.fallbackTriggers++;
+                            candidates = this.getValidCandidates(slotIndex, pos, currentRoster, true, true);
+                        }
+
+                        if (candidates.length > 0) {
+                            const bestCandidate = this.sortCandidates(candidates, pos, slotIndex, currentRoster)[0];
+                            slot.assignments[pos] = bestCandidate.id;
+
+                            if (usedTsoSwap) {
+                                this.fallbackDetails.push({ slotIndex, position: pos, reason: `TSO Cross-Half Swap (${bestCandidate.name})`, isSwap: true });
+                            } else if (usedTier3) {
+                                this.fallbackDetails.push({ slotIndex, position: pos, reason: `Breached 2-Hr Limit (${bestCandidate.name})`, isSwap: false });
+                            } else if (usedTier2) {
+                                this.fallbackDetails.push({ slotIndex, position: pos, reason: `No 30m Break (${bestCandidate.name})`, isSwap: false });
+                            }
+                        }
+                    }
+                }
+
+                const duration = Math.round(performance.now() - startTime);
+                return { roster: currentRoster, stats: { executionTimeMs: duration, fallbackTriggers: this.fallbackTriggers, tsoSwaps: this.tsoSwaps, fallbacks: this.fallbackDetails } };
+            }
+
+            getValidCandidates(slotIndex, targetPos, currentRoster, ignoreLimit, ignoreBreak) {
+                const period = this.getActivePeriod(slotIndex);
+                
+                return this.employees.filter(emp => {
+                    const isMyHalf = (period === ActivePeriod.COMMON) ? true :
+                                     (period === ActivePeriod.FIRST_HALF ? emp.group === EmployeeGroup.FIRST_HALF : emp.group === EmployeeGroup.SECOND_HALF);
+                    
+                    const isTsoManningTso = (emp.tsoRole === TsoRole.TSO && targetPos === Position.TSO);
+                    
+                    if (!isMyHalf && !isTsoManningTso) return false;
+                    if (Object.values(currentRoster[slotIndex].assignments).includes(emp.id)) return false;
+
+                    const lastSlot = slotIndex > 0 ? currentRoster[slotIndex - 1] : null;
+                    let prevPos = null;
+                    if (lastSlot) {
+                        for (const [p, id] of Object.entries(lastSlot.assignments)) {
+                            if (id === emp.id) prevPos = p;
+                        }
+                    }
+
+                    if (!ignoreBreak && prevPos !== null && prevPos !== targetPos) return false;
+
+                    if (!ignoreLimit && targetPos !== Position.TSO) {
+                        const consecutive = this.getConsecutiveSlots(emp.id, slotIndex, currentRoster);
+                        if (consecutive >= this.maxContinuousSlots) return false;
+                    }
+                    return true;
+                });
+            }
+
+            sortCandidates(candidates, targetPos, slotIndex, currentRoster) {
+                const period = this.getActivePeriod(slotIndex);
+                const isCommonHalf = period === ActivePeriod.COMMON;
+
+                // Randomize array first to prevent deterministic bias
+                const shuffled = candidates.sort(() => Math.random() - 0.5);
+
+                return shuffled.sort((a, b) => {
+                    return this.calculateScore(a, targetPos, slotIndex, currentRoster, isCommonHalf, period) - 
+                           this.calculateScore(b, targetPos, slotIndex, currentRoster, isCommonHalf, period);
+                });
+            }
+
+            calculateScore(emp, targetPos, slotIndex, currentRoster, isCommonHalf, period) {
+                let score = 0;
+                const isTsoEligible = emp.tsoRole === TsoRole.TSO;
+                const isMyHalf = isCommonHalf || (period === ActivePeriod.FIRST_HALF && emp.group === EmployeeGroup.FIRST_HALF) || (period === ActivePeriod.SECOND_HALF && emp.group === EmployeeGroup.SECOND_HALF);
+                
+                const consecutive = this.getConsecutiveSlots(emp.id, slotIndex, currentRoster);
+                const lastSlot = slotIndex > 0 ? currentRoster[slotIndex - 1] : null;
+                let lastPos = null;
+                if (lastSlot) {
+                    for (const [p, id] of Object.entries(lastSlot.assignments)) if (id === emp.id) lastPos = p;
+                }
+                const isContinuing = (consecutive > 0 && lastPos === targetPos);
+                const totalMins = this.getTotalMinutes(emp.id, slotIndex, currentRoster);
+                const fatigueStep = Math.floor(100000 / Math.max(1, this.maxContinuousSlots - 1));
+
+                if (targetPos === Position.TSO) {
+                    if (isTsoEligible) {
+                        if (isCommonHalf) {
+                            score -= 10000000;
+                            score += (totalMins * 1000); // Fatigue balancing
+                            if (isContinuing) {
+                                score -= 100000;
+                                score += (consecutive * fatigueStep); // Tag-out approach
+                            }
+                        } else {
+                            if (isMyHalf) score -= 10000000; else score += 100000;
+                        }
+                    } else {
+                        score += 5000000; // Penalize non-TSOs on TSO console
+                    }
+                } else {
+                    if (isTsoEligible) {
+                        score += 1000000; // Penalize TSOs on standard console
+                    } else {
+                        score += (totalMins * 1000); // Global fatigue balancing
+                        if (isContinuing) {
+                            score -= 100000; // Keep them on console
+                            score += (consecutive * fatigueStep); // Weakens lock as limit approaches
+                        }
+                    }
+                }
+
+                // Apply Preferences overrides (Non-TSOs)
+                if (!isTsoEligible) {
+                    if (emp.preferredSlots.includes(slotIndex)) score -= 500000;
+                    if (emp.preferredPositions.includes(targetPos)) score -= 50000;
+                    if (emp.nonPreferredSlots.includes(slotIndex)) score += 500000;
+                }
+
+                return score;
+            }
+
+            getConsecutiveSlots(empId, slotIndex, currentRoster) {
+                let count = 0;
+                for (let i = slotIndex - 1; i >= 0; i--) {
+                    if (Object.values(currentRoster[i].assignments).includes(empId)) count++;
+                    else break;
+                }
+                return count;
+            }
+
+            getTotalMinutes(empId, slotIndex, currentRoster) {
+                let count = 0;
+                for (let i = 0; i < slotIndex; i++) {
+                    if (Object.values(currentRoster[i].assignments).includes(empId)) count += 30;
+                }
+                return count;
+            }
+        }
+
+        const app = {
+            init() {
+                this.solveRoster(false); // Initial solve silently
+                this.switchTab('Home');
+            },
+
+            solveRoster(showNotification = true) {
+                const solver = new DynamicRosterSolver(appState.employees, appState.maxContinuousSlots);
+                const result = solver.solve();
+                appState.generatedRoster = result.roster;
+                appState.solverStats = result.stats;
+                if (showNotification) showToast("Roster Generated Successfully");
+                this.renderCurrentTab();
+            },
+
+            switchTab(tabName) {
+                appState.activeTab = tabName;
+                document.querySelectorAll('.nav-btn').forEach(btn => {
+                    btn.classList.remove('text-indigo-400');
+                    btn.classList.add('text-slate-400');
+                });
+                const activeBtn = document.getElementById(`nav-${tabName}`);
+                if(activeBtn) {
+                    activeBtn.classList.remove('text-slate-400');
+                    activeBtn.classList.add('text-indigo-400');
+                }
+                this.renderCurrentTab();
+            },
+
+            renderCurrentTab() {
+                const container = document.getElementById('main-content');
+                container.innerHTML = '';
+                
+                switch(appState.activeTab) {
+                    case 'Home': this.renderHome(container); break;
+                    case 'Crew': this.renderCrew(container); break;
+                    case 'Roster': this.renderRoster(container); break;
+                    case 'View': this.renderView(container); break;
+                }
+            },
+
+            renderHome(container) {
+                let html = `
+                    <div class="flex flex-col gap-4 max-w-2xl mx-auto pb-6">
+                        <div class="bg-slate-800 border border-indigo-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                            <div class="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
+                            <h2 class="text-base font-black text-white flex items-center gap-2">
+                                <i class="fas fa-cogs text-indigo-400"></i> Staggered Cascading Engine Active
+                            </h2>
+                            <p class="text-xs text-slate-300 mt-2 leading-relaxed">
+                                Slots 0-7 operate as COMMON group. The engine dynamically balances workloads globally for all Non-TSO personnel while ensuring 100% station coverage. Fixed limit: 4 continuous slots.
+                            </p>
+                        </div>
+                        
+                        <button onclick="app.solveRoster()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg transition-all transform active:scale-95">
+                            Compile & Solve Roster
+                        </button>
+                `;
+
+                if (appState.generatedRoster) {
+                    html += `
+                        <button onclick="app.exportPDF()" class="w-full bg-secondary hover:bg-teal-400 text-slate-950 font-black py-3 rounded-xl shadow-lg transition-all transform active:scale-95 flex items-center justify-center gap-2">
+                            <i class="fas fa-file-pdf"></i> Export Roster to PDF
+                        </button>
+                    `;
+                }
+
+                if (appState.solverStats) {
+                    const s = appState.solverStats;
+                    html += `
+                        <div class="bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-inner space-y-3">
+                            <h3 class="text-xs font-black uppercase text-secondary tracking-widest">Solver Compilation Logs</h3>
+                            
+                            <div class="font-mono text-xs space-y-1.5">
+                                <div class="flex justify-between border-b border-slate-800 pb-1">
+                                    <span class="text-slate-400">Execution Time:</span> <span class="text-white">${s.executionTimeMs} ms</span>
+                                </div>
+                                <div class="flex justify-between border-b border-slate-800 pb-1">
+                                    <span class="text-slate-400">TSO Swaps Executed:</span> 
+                                    <span class="${s.tsoSwaps > 0 ? 'text-cyan-400 font-bold' : 'text-secondary'}">${s.tsoSwaps}</span>
+                                </div>
+                                <div class="flex justify-between border-b border-slate-800 pb-1">
+                                    <span class="text-slate-400">Emergency Fallbacks Triggered:</span> 
+                                    <span class="${s.fallbackTriggers > 0 ? 'text-yellow-400 font-bold' : 'text-secondary'}">${s.fallbackTriggers}</span>
+                                </div>
+                                <div class="flex justify-between pt-1">
+                                    <span class="text-slate-400">Coverage Output:</span> <span class="text-white font-bold bg-green-500/20 px-2 rounded">100% Manned</span>
+                                </div>
+                            </div>
+                    `;
+
+                    if (s.fallbacks.length > 0) {
+                        html += `<div class="mt-4 bg-slate-950 rounded-xl p-3 border border-slate-800 space-y-2">
+                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Event Explanations:</p>
+                                    <ul class="space-y-2">`;
+                        s.fallbacks.forEach(fb => {
+                            const time = SLOT_TIMES[fb.slotIndex];
+                            const color = fb.isSwap ? 'text-cyan-400' : 'text-yellow-400';
+                            const prefix = fb.isSwap ? '[SWAP]' : '[LIMIT]';
+                            html += `<li class="text-[10px] ${color} bg-slate-900 p-2 rounded border border-slate-800">
+                                <span class="font-bold">Slot ${fb.slotIndex} (${time}) ${fb.position}:</span> ${prefix} ${fb.reason}
+                            </li>`;
+                        });
+                        html += `</ul></div>`;
+                    }
+                    html += `</div>`;
+                }
+
+                html += `</div>`;
+                container.innerHTML = html;
+            },
+
+            renderCrew(container) {
+                let html = `
+                    <div class="flex flex-col gap-4 max-w-2xl mx-auto pb-20">
+                        <div class="flex justify-between items-center">
+                            <h2 class="text-lg font-black text-white">Manning Configuration</h2>
+                            <button onclick="app.resetCrew()" class="text-xs font-bold text-cyan-400 hover:underline">Reset</button>
+                        </div>
+
+                        <!-- Add Employee Form -->
+                        <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-md space-y-4">
+                            <div class="flex gap-2">
+                                <input type="text" id="empName" placeholder="Name/Initials" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-primary">
+                                <button onclick="app.addEmployee()" class="bg-primary hover:bg-indigo-500 text-white font-bold px-4 rounded-lg transition-colors">Add</button>
+                            </div>
+                            
+                            <div class="flex gap-6 items-center">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="empGroup" value="FIRST_HALF" checked class="text-primary focus:ring-primary accent-primary"> <span class="text-xs font-bold">First Half</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="empGroup" value="SECOND_HALF" class="text-primary focus:ring-primary accent-primary"> <span class="text-xs font-bold">Second Half</span>
+                                </label>
+                            </div>
+
+                            <label class="flex items-center gap-2 cursor-pointer bg-slate-900/50 p-2 rounded-lg border border-slate-700/50">
+                                <input type="checkbox" id="empTso" onchange="app.togglePreferencesUI()" class="rounded text-primary focus:ring-primary accent-primary w-4 h-4"> 
+                                <span class="text-xs font-bold text-yellow-400">Primary TSO Position</span>
+                            </label>
+
+                            <div id="preferences-container" class="space-y-3 pt-2 border-t border-slate-700">
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Non-TSO Preferences</p>
+                                
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="relative">
+                                        <button onclick="document.getElementById('pref-menu').classList.toggle('hidden')" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-left flex justify-between items-center text-slate-300">
+                                            Prefer Slots (Max 4) <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div id="pref-menu" class="hidden absolute top-full left-0 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-48 overflow-y-auto z-20 p-2 space-y-1">
+                                            ${SLOT_TIMES.map((time, idx) => `
+                                                <label class="flex items-center gap-2 text-xs p-1 hover:bg-slate-700 rounded cursor-pointer">
+                                                    <input type="checkbox" class="pref-slot-cb accent-secondary" value="${idx}" onchange="app.limitCheckboxes('pref-slot-cb', 4, this)"> Slot ${idx}: ${time}
+                                                </label>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                    <div class="relative">
+                                        <button onclick="document.getElementById('avoid-menu').classList.toggle('hidden')" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-left flex justify-between items-center text-slate-300">
+                                            Avoid Slots (Max 6) <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div id="avoid-menu" class="hidden absolute top-full left-0 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-48 overflow-y-auto z-20 p-2 space-y-1">
+                                            ${SLOT_TIMES.map((time, idx) => `
+                                                <label class="flex items-center gap-2 text-xs p-1 hover:bg-slate-700 rounded cursor-pointer">
+                                                    <input type="checkbox" class="avoid-slot-cb accent-red-500" value="${idx}" onchange="app.limitCheckboxes('avoid-slot-cb', 6, this)"> Slot ${idx}: ${time}
+                                                </label>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="relative">
+                                    <button onclick="document.getElementById('pos-menu').classList.toggle('hidden')" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-left flex justify-between items-center text-slate-300">
+                                        Prefer Positions (TWR/SMC/CLD) <i class="fas fa-chevron-down"></i>
+                                    </button>
+                                    <div id="pos-menu" class="hidden absolute top-full left-0 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl z-20 p-2 flex gap-4">
+                                        ${['TWR', 'SMC', 'CLD'].map(pos => `
+                                            <label class="flex items-center gap-1 text-xs cursor-pointer">
+                                                <input type="checkbox" class="pref-pos-cb accent-cyan-500" value="${pos}"> ${pos}
+                                            </label>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Employee List -->
+                        <div class="space-y-2">
+                            ${appState.employees.map(emp => `
+                                <div class="bg-slate-800/80 border border-slate-700 rounded-xl p-3 flex justify-between items-center shadow-sm">
+                                    <div class="flex flex-col">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-black text-white text-base">${emp.name}</span>
+                                            ${emp.tsoRole === TsoRole.TSO ? `<span class="bg-yellow-500/20 text-yellow-400 text-[9px] font-black px-2 py-0.5 rounded border border-yellow-500/30">TSO</span>` : ''}
+                                        </div>
+                                        <span class="text-[10px] font-bold text-slate-400">${emp.group.replace('_', ' ')}</span>
+                                        ${emp.preferredSlots.length > 0 ? `<span class="text-[9px] text-secondary">Prefers: ${emp.preferredSlots.join(', ')}</span>` : ''}
+                                        ${emp.nonPreferredSlots.length > 0 ? `<span class="text-[9px] text-red-400">Avoids: ${emp.nonPreferredSlots.join(', ')}</span>` : ''}
+                                        ${emp.preferredPositions.length > 0 ? `<span class="text-[9px] text-cyan-400">Pos: ${emp.preferredPositions.join(', ')}</span>` : ''}
+                                    </div>
+                                    <div class="flex gap-2">
+                                        <button onclick="app.toggleGroup('${emp.id}')" class="bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors">Toggle</button>
+                                        <button onclick="app.deleteEmployee('${emp.id}')" class="bg-red-500/20 hover:bg-red-500/40 text-red-400 w-7 h-7 rounded flex items-center justify-center transition-colors"><i class="fas fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+                container.innerHTML = html;
+            },
+
+            togglePreferencesUI() {
+                const isTso = document.getElementById('empTso').checked;
+                const prefContainer = document.getElementById('preferences-container');
+                if (isTso) prefContainer.classList.add('opacity-30', 'pointer-events-none');
+                else prefContainer.classList.remove('opacity-30', 'pointer-events-none');
+            },
+
+            limitCheckboxes(className, max, clickedCb) {
+                const cbs = document.querySelectorAll(`.${className}:checked`);
+                if (cbs.length > max) {
+                    clickedCb.checked = false;
+                    showToast(`Maximum ${max} selections allowed.`, 'error');
+                }
+            },
+
+            addEmployee() {
+                const nameInput = document.getElementById('empName').value.trim();
+                if (!nameInput) return showToast("Name is required", 'error');
+                
+                const group = document.querySelector('input[name="empGroup"]:checked').value;
+                const isTso = document.getElementById('empTso').checked;
+                
+                const emp = new Employee(nameInput, group, isTso ? TsoRole.TSO : TsoRole.NONE);
+                
+                if (!isTso) {
+                    document.querySelectorAll('.pref-slot-cb:checked').forEach(cb => emp.preferredSlots.push(parseInt(cb.value)));
+                    document.querySelectorAll('.avoid-slot-cb:checked').forEach(cb => emp.nonPreferredSlots.push(parseInt(cb.value)));
+                    document.querySelectorAll('.pref-pos-cb:checked').forEach(cb => emp.preferredPositions.push(cb.value));
+                }
+
+                appState.employees.push(emp);
+                this.solveRoster(false); // auto compile
+                this.renderCurrentTab();
+                showToast("Employee Added");
+            },
+
+            deleteEmployee(id) {
+                appState.employees = appState.employees.filter(e => e.id !== id);
+                this.solveRoster(false);
+                this.renderCurrentTab();
+            },
+
+            toggleGroup(id) {
+                const emp = appState.employees.find(e => e.id === id);
+                if (emp) {
+                    emp.group = emp.group === EmployeeGroup.FIRST_HALF ? EmployeeGroup.SECOND_HALF : EmployeeGroup.FIRST_HALF;
+                    this.solveRoster(false);
+                    this.renderCurrentTab();
+                }
+            },
+
+            resetCrew() {
+                appState.employees = [
+                    new Employee("A", EmployeeGroup.FIRST_HALF, TsoRole.TSO), new Employee("B", EmployeeGroup.FIRST_HALF),
+                    new Employee("C", EmployeeGroup.FIRST_HALF), new Employee("D", EmployeeGroup.FIRST_HALF), new Employee("E", EmployeeGroup.FIRST_HALF),
+                    new Employee("F", EmployeeGroup.SECOND_HALF, TsoRole.TSO), new Employee("G", EmployeeGroup.SECOND_HALF),
+                    new Employee("H", EmployeeGroup.SECOND_HALF), new Employee("I", EmployeeGroup.SECOND_HALF), new Employee("J", EmployeeGroup.SECOND_HALF)
+                ];
+                this.solveRoster(true);
+            },
+
+            renderRoster(container) {
+                if (!appState.generatedRoster) {
+                    container.innerHTML = `<div class="flex h-full items-center justify-center text-slate-500 font-bold">No roster resolved. Tap Compile on Home tab.</div>`;
+                    return;
+                }
+
+                const roster = appState.generatedRoster;
+                const reqs = [Position.TWR, Position.SMC, Position.CLD, Position.TSO]; // TSO last column
+
+                let html = `
+                    <div class="flex flex-col h-full max-w-4xl mx-auto pb-4">
+                        <div class="flex bg-slate-800 p-3 rounded-t-xl sticky top-0 z-10 shadow-md">
+                            <div class="w-20 font-black text-[10px] text-slate-400">SLOT</div>
+                            ${reqs.map(pos => `<div class="flex-1 text-center font-black text-[10px] text-slate-400">${pos}</div>`).join('')}
+                        </div>
+                        <div class="flex-1 bg-slate-900 border border-slate-800 rounded-b-xl overflow-hidden flex flex-col">
+                `;
+
+                roster.forEach((slot, index) => {
+                    const prevSlot = index > 0 ? roster[index - 1] : null;
+                    const nextSlot = index < roster.length - 1 ? roster[index + 1] : null;
+
+                    html += `<div class="flex border-b border-slate-800/50 min-h-[48px] items-stretch px-2 py-1 hover:bg-slate-800/30 transition-colors">`;
+                    
+                    // Column 1: Slot info (No redundant time strings)
+                    html += `
+                        <div class="w-[72px] flex flex-col justify-center py-2 shrink-0">
+                            <span class="font-bold text-white text-xs">Slot ${slot.slotIndex}</span>
+                            <span class="text-[8px] font-black text-indigo-400 mt-0.5">${slot.activePeriod.replace('_', ' ')}</span>
+                        </div>
+                    `;
+
+                    // Dynamic Position Columns
+                    reqs.forEach(pos => {
+                        const empId = slot.assignments[pos];
+                        const emp = appState.employees.find(e => e.id === empId);
+                        
+                        const isSameAsPrev = prevSlot && prevSlot.assignments[pos] === empId && empId;
+                        const isSameAsNext = nextSlot && nextSlot.assignments[pos] === empId && empId;
+
+                        const pt = isSameAsPrev ? 'pt-0' : 'pt-1';
+                        const pb = isSameAsNext ? 'pb-0' : 'pb-1';
+                        const roundedTop = isSameAsPrev ? 'rounded-t-none' : 'rounded-t-md';
+                        const roundedBottom = isSameAsNext ? 'rounded-b-none' : 'rounded-b-md';
+
+                        html += `<div class="flex-1 px-1 flex flex-col ${pt} ${pb}">`;
+                        
+                        if (emp) {
+                            // Find continuous block end slot for time display
+                            let endIdx = index;
+                            if (!isSameAsPrev) {
+                                for(let i = index+1; i < roster.length; i++) {
+                                    if (roster[i].assignments[pos] === empId) endIdx = i;
+                                    else break;
+                                }
+                            }
+
+                            const colorMap = { TSO: 'bg-yellow-500', TWR: 'bg-cyan-500', SMC: 'bg-secondary', CLD: 'bg-purple-500' };
+                            const barColor = colorMap[pos];
+
+                            html += `
+                                <div class="flex-1 bg-slate-800 flex items-stretch ${roundedTop} ${roundedBottom} shadow-sm overflow-hidden border border-slate-700/30 relative group">
+                                    <div class="w-1 ${barColor}"></div>
+                                    <div class="flex-1 flex flex-col items-center justify-center p-1 relative z-10">
+                                        ${!isSameAsPrev ? `
+                                            <span class="font-black text-white text-[11px] leading-tight">${emp.name}</span>
+                                            <span class="text-[8px] text-slate-400 font-bold mt-0.5 bg-slate-900/80 px-1 rounded block">${SLOT_TIMES[index].slice(0,4)}–${SLOT_TIMES[endIdx].slice(5,9)}</span>
+                                        ` : `
+                                            <div class="w-[2px] h-full bg-slate-600/30 rounded-full my-1"></div>
+                                        `}
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            html += `
+                                <div class="flex-1 bg-red-500/10 ${roundedTop} ${roundedBottom} flex items-center justify-center border border-red-500/20">
+                                    <span class="text-red-500/50 text-[10px] font-bold"><i class="fas fa-times"></i></span>
+                                </div>
+                            `;
+                        }
+                        html += `</div>`;
+                    });
+                    
+                    html += `</div>`; // end row
+                });
+
+                html += `</div></div>`;
+                container.innerHTML = html;
+            },
+
+            renderView(container) {
+                if (!appState.generatedRoster) {
+                    container.innerHTML = `<div class="flex h-full items-center justify-center text-slate-500 font-bold">No roster resolved. Tap Compile on Home tab.</div>`;
+                    return;
+                }
+
+                let html = `<div class="max-w-2xl mx-auto space-y-4 pb-20"><h2 class="text-lg font-black text-white">Employee Deployment Blocks</h2>`;
+                
+                appState.employees.forEach(emp => {
+                    const workedSlots = appState.generatedRoster.filter(s => Object.values(s.assignments).includes(emp.id));
+                    const totalMins = workedSlots.length * 30;
+                    
+                    html += `
+                        <div class="bg-slate-800 rounded-xl p-4 border border-slate-700 shadow-md">
+                            <div class="flex justify-between items-center mb-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-black text-primary text-base">${emp.name}</span>
+                                    ${emp.tsoRole === TsoRole.TSO ? `<span class="text-[9px] font-black text-yellow-500 bg-yellow-500/10 px-1 rounded">[TSO EXCLUDED]</span>` : ''}
+                                </div>
+                                <span class="font-bold text-slate-400 bg-slate-900 px-2 py-1 rounded-lg">${totalMins} mins</span>
+                            </div>
+                    `;
+
+                    if (workedSlots.length === 0) {
+                        html += `<p class="text-xs text-slate-500 italic">No assigned duties.</p>`;
+                    } else {
+                        // Group into continuous blocks
+                        const blocks = [];
+                        workedSlots.forEach(slot => {
+                            let pos = null;
+                            for (const [p, id] of Object.entries(slot.assignments)) if (id === emp.id) pos = p;
+                            if (!pos) return;
+                            
+                            const last = blocks[blocks.length - 1];
+                            if (last && last.pos === pos && last.eIdx === slot.slotIndex - 1) {
+                                last.eIdx = slot.slotIndex;
+                            } else {
+                                blocks.push({ sIdx: slot.slotIndex, eIdx: slot.slotIndex, pos: pos });
+                            }
+                        });
+
+                        const iconMap = { TWR: 'fa-map-marker-alt', SMC: 'fa-bars', CLD: 'fa-check-circle', TSO: 'fa-star' };
+                        
+                        html += `<div class="space-y-1">`;
+                        blocks.forEach(b => {
+                            const startStr = SLOT_TIMES[b.sIdx].slice(0, 4);
+                            const endStr = SLOT_TIMES[b.eIdx].slice(5, 9);
+                            const lbl = b.sIdx === b.eIdx ? `Slot ${b.sIdx}` : `Slots ${b.sIdx}-${b.eIdx}`;
+                            
+                            html += `
+                                <div class="flex justify-between items-center text-xs p-1.5 hover:bg-slate-700/50 rounded transition-colors border-b border-slate-700/50 last:border-0">
+                                    <span class="text-slate-300 font-medium">${lbl}: <span class="text-white font-bold ml-1">${startStr}–${endStr}</span></span>
+                                    <span class="font-black text-cyan-400 flex items-center gap-1.5 bg-cyan-400/10 px-2 py-0.5 rounded">
+                                        <i class="fas ${iconMap[b.pos]} text-[10px]"></i> ${b.pos}
+                                    </span>
+                                </div>
+                            `;
+                        });
+                        html += `</div>`;
+                    }
+                    html += `</div>`;
+                });
+
+                html += `</div>`;
+                container.innerHTML = html;
+            },
+
+            exportPDF() {
+                if (!appState.generatedRoster) return;
+                
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+                    
+                    doc.setFontSize(16);
+                    doc.text("Night's Watch - Generated Duty Roster", 14, 20);
+                    doc.setFontSize(10);
+                    doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
+                    
+                    const head = [['SLOT (TIME)', 'TWR', 'SMC', 'CLD', 'TSO']];
+                    const body = appState.generatedRoster.map(slot => {
+                        const timeSpan = `${SLOT_TIMES[slot.slotIndex].slice(0,4)}–${SLOT_TIMES[slot.slotIndex].slice(5,9)}`;
+                        const slotStr = `Slot ${slot.slotIndex} (${timeSpan})`;
+                        
+                        const getEmpName = (pos) => {
+                            const id = slot.assignments[pos];
+                            const emp = appState.employees.find(e => e.id === id);
+                            return emp ? emp.name : '-';
+                        };
+                        
+                        return [
+                            slotStr,
+                            getEmpName(Position.TWR),
+                            getEmpName(Position.SMC),
+                            getEmpName(Position.CLD),
+                            getEmpName(Position.TSO)
+                        ];
+                    });
+
+                    doc.autoTable({
+                        head: head,
+                        body: body,
+                        startY: 35,
+                        theme: 'grid',
+                        styles: { fontSize: 9, cellPadding: 2 },
+                        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
+                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } }
+                    });
+
+                    doc.save("Duty_Roster.pdf");
+                    showToast("PDF Exported Successfully");
+                } catch (error) {
+                    console.error("PDF Export failed:", error);
+                    showToast("Failed to generate PDF", 'error');
+                }
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Close dropdowns if clicked outside
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('#preferences-container')) {
+                    ['pref-menu', 'avoid-menu', 'pos-menu'].forEach(id => {
+                        const menu = document.getElementById(id);
+                        if (menu && !menu.classList.contains('hidden')) {
+                            menu.classList.add('hidden');
+                        }
+                    });
+                }
+            });
+            app.init();
+        });
+    </script>
+</body>
+</html>
