@@ -509,12 +509,12 @@
                                     </div>
                                     <div class="relative">
                                         <button onclick="document.getElementById('avoid-menu').classList.toggle('hidden')" class="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-xs text-left flex justify-between items-center text-slate-300">
-                                            Avoid Slots (Max 6) <i class="fas fa-chevron-down"></i>
+                                            Avoid Slots (Max 24) <i class="fas fa-chevron-down"></i>
                                         </button>
                                         <div id="avoid-menu" class="hidden absolute top-full left-0 w-full mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-48 overflow-y-auto z-20 p-2 space-y-1">
                                             ${SLOT_TIMES.map((time, idx) => `
                                                 <label class="flex items-center gap-2 text-xs p-1 hover:bg-slate-700 rounded cursor-pointer">
-                                                    <input type="checkbox" class="avoid-slot-cb accent-red-500" value="${idx}" onchange="app.limitCheckboxes('avoid-slot-cb', 6, this)"> Slot ${idx}: ${time}
+                                                    <input type="checkbox" class="avoid-slot-cb accent-red-500" value="${idx}" onchange="app.limitCheckboxes('avoid-slot-cb', 24, this)"> Slot ${idx}: ${time}
                                                 </label>
                                             `).join('')}
                                         </div>
