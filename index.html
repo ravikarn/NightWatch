@@ -792,33 +792,66 @@
                     doc.text(`Generated on: ${new Date().toLocaleString()}`, 14, 28);
                     
                     const head = [['SLOT (TIME)', 'TWR', 'SMC', 'CLD', 'TSO']];
-                    const body = appState.generatedRoster.map(slot => {
+                    
+                    const reqs = [Position.TWR, Position.SMC, Position.CLD, Position.TSO];
+                    const body = [];
+                    const roster = appState.generatedRoster;
+
+                    for (let i = 0; i < roster.length; i++) {
+                        const slot = roster[i];
                         const timeSpan = `${SLOT_TIMES[slot.slotIndex].slice(0,4)}–${SLOT_TIMES[slot.slotIndex].slice(5,9)}`;
-                        const slotStr = `Slot ${slot.slotIndex} (${timeSpan})`;
-                        
-                        const getEmpName = (pos) => {
-                            const id = slot.assignments[pos];
-                            const emp = appState.employees.find(e => e.id === id);
-                            return emp ? emp.name : '-';
-                        };
-                        
-                        return [
-                            slotStr,
-                            getEmpName(Position.TWR),
-                            getEmpName(Position.SMC),
-                            getEmpName(Position.CLD),
-                            getEmpName(Position.TSO)
-                        ];
-                    });
+                        // Add a newline for cleaner formatting in the PDF
+                        const slotStr = `Slot ${slot.slotIndex}\n${timeSpan}`;
+                        const rowCells = [slotStr];
+
+                        for (let p = 0; p < reqs.length; p++) {
+                            const pos = reqs[p];
+                            const currentEmpId = slot.assignments[pos];
+                            const prevEmpId = i > 0 ? roster[i - 1].assignments[pos] : null;
+
+                            // If this is the start of a new assignment block
+                            if (currentEmpId !== prevEmpId) {
+                                let rowSpan = 1;
+                                // Look ahead to calculate the total length of this continuous block
+                                for (let j = i + 1; j < roster.length; j++) {
+                                    if (roster[j].assignments[pos] === currentEmpId) {
+                                        rowSpan++;
+                                    } else {
+                                        break;
+                                    }
+                                }
+
+                                const emp = appState.employees.find(e => e.id === currentEmpId);
+                                const name = emp ? emp.name : '-';
+                                
+                                // Push a specially formatted cell object with a rowSpan
+                                rowCells.push({
+                                    content: name,
+                                    rowSpan: rowSpan,
+                                    styles: {
+                                        valign: 'middle',
+                                        halign: 'center',
+                                        fontStyle: name !== '-' ? 'bold' : 'normal',
+                                        textColor: name !== '-' ? [15, 23, 42] : [148, 163, 184]
+                                    }
+                                });
+                            }
+                            // If it's a continuation, we DO NOT push a cell for this column.
+                            // The autoTable plugin handles the shifting automatically.
+                        }
+                        body.push(rowCells);
+                    }
 
                     doc.autoTable({
                         head: head,
                         body: body,
                         startY: 35,
                         theme: 'grid',
-                        styles: { fontSize: 9, cellPadding: 2 },
-                        headStyles: { fillColor: [79, 70, 229] }, // Indigo-600
-                        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } }
+                        styles: { fontSize: 9, cellPadding: 3, lineColor: [203, 213, 225], lineWidth: 0.1 },
+                        headStyles: { fillColor: [79, 70, 229], halign: 'center', valign: 'middle' }, // Indigo-600
+                        columnStyles: { 
+                            0: { fontStyle: 'bold', cellWidth: 35, halign: 'left', valign: 'middle' } 
+                        }
                     });
 
                     doc.save("Duty_Roster.pdf");
