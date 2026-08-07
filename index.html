@@ -871,6 +871,71 @@
                         }
                     });
 
+                    // ---------------------------------------------------------
+                    // Generate the second table (Deployment Summary)
+                    // ---------------------------------------------------------
+                    
+                    const summaryHead = [['Employee', 'Total Duty', 'Deployment Blocks']];
+                    const summaryBody = [];
+                    
+                    appState.employees.forEach(emp => {
+                        const workedSlots = appState.generatedRoster.filter(s => Object.values(s.assignments).includes(emp.id));
+                        const totalMins = workedSlots.length * 30;
+                        
+                        let blocksStr = "None";
+                        if (workedSlots.length > 0) {
+                            const blocks = [];
+                            workedSlots.forEach(slot => {
+                                let pos = null;
+                                for (const [p, id] of Object.entries(slot.assignments)) if (id === emp.id) pos = p;
+                                if (!pos) return;
+                                
+                                const last = blocks[blocks.length - 1];
+                                if (last && last.pos === pos && last.eIdx === slot.slotIndex - 1) {
+                                    last.eIdx = slot.slotIndex;
+                                } else {
+                                    blocks.push({ sIdx: slot.slotIndex, eIdx: slot.slotIndex, pos: pos });
+                                }
+                            });
+                            
+                            // Format blocks: [TWR] 1330-1430, [SMC] 1500-1600
+                            blocksStr = blocks.map(b => {
+                                const startStr = SLOT_TIMES[b.sIdx].slice(0, 4);
+                                const endStr = SLOT_TIMES[b.eIdx].slice(5, 9);
+                                return `[${b.pos}] ${startStr}–${endStr}`;
+                            }).join('\n'); // newline string to break correctly in pdf cells
+                        }
+                        
+                        let empName = emp.name;
+                        if(emp.tsoRole === TsoRole.TSO) empName += " (TSO)";
+                        
+                        summaryBody.push([
+                            empName,
+                            `${totalMins} mins`,
+                            blocksStr
+                        ]);
+                    });
+
+                    // Calculate Y position dynamically after the first table
+                    const finalY = doc.lastAutoTable.finalY + 15;
+                    
+                    doc.setFontSize(14);
+                    doc.text("Employee Deployment Summary", 14, finalY);
+                    
+                    doc.autoTable({
+                        head: summaryHead,
+                        body: summaryBody,
+                        startY: finalY + 5,
+                        theme: 'striped',
+                        styles: { fontSize: 8, cellPadding: 2, valign: 'middle' },
+                        headStyles: { fillColor: [15, 23, 42], halign: 'left' }, // Slate-900
+                        columnStyles: { 
+                            0: { fontStyle: 'bold', cellWidth: 40 },
+                            1: { cellWidth: 25 },
+                            // column 2 (blocks) takes up remaining space
+                        }
+                    });
+
                     doc.save("Duty_Roster.pdf");
                     showToast("PDF Exported Successfully");
                 } catch (error) {
