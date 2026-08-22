@@ -4,131 +4,166 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Night's Watch Duty Roster</title>
-    <!-- Tailwind CSS -->
+    
+    <!-- Owl Emoji Favicon -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
+
+    <!-- Tailwind CSS Config for Dark Mode -->
+    <script>
+        tailwind = {
+            config: {
+                darkMode: 'class',
+            }
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- jsPDF & AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    
     <style>
         /* Custom scrollbar and selection UI for multi-selects */
         select[multiple] { height: 160px; outline: none; }
         select[multiple] option { padding: 4px 8px; margin-bottom: 2px; border-radius: 4px; cursor: pointer; }
         select[multiple] option:checked { background-color: #3b82f6 !important; color: white; }
-        .pastel-bg { background-color: #f8fafc; }
     </style>
+
+    <!-- Theme Initialization -->
+    <script>
+        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+            localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+        }
+    </script>
 </head>
-<body class="bg-gray-100 min-h-screen font-sans">
+<body class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans transition-colors duration-200">
+
+<!-- Dark Mode Toggle Button -->
+<button onclick="toggleTheme()" class="absolute top-4 right-4 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors focus:outline-none shadow-sm">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 dark:hidden block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+    </svg>
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 dark:block hidden text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+    </svg>
+</button>
 
 <div class="max-w-7xl mx-auto px-4 py-8">
     
-    <!-- Header -->
+    <!-- Header with Owl Emoji Logo -->
     <div class="text-center mb-8">
-        <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Night's Watch Dynamic Planner</h1>
-        <p class="mt-2 text-lg text-green-600 font-semibold tracking-wide">Created by Ravi S Karn</p>
+        <div class="text-7xl mb-4 select-none drop-shadow-md">🦉</div>
+        <h1 class="text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight transition-colors">Night's Watch Dynamic Planner</h1>
+        <p class="mt-2 text-lg text-green-600 dark:text-green-400 font-semibold tracking-wide">Created by Ravi S Karn</p>
     </div>
 
     <!-- Main Layout -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
         
         <!-- Input Form -->
-        <div class="bg-white rounded-xl shadow-md p-6 border border-gray-200">
-            <h2 class="text-xl font-bold text-gray-800 mb-6 border-b pb-2">Add ATCO</h2>
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 transition-colors">
+            <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-6 border-b border-gray-200 dark:border-gray-700 pb-2">Add ATCO</h2>
             
             <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-1">ATCO Name</label>
-                <input type="text" id="atco-name" class="w-full rounded-md border border-gray-300 p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500" placeholder="e.g., John Snow">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">ATCO Name</label>
+                <input type="text" id="atco-name" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors" placeholder="e.g., JOHN SNOW">
             </div>
 
             <!-- Shift Category -->
             <div class="mb-5">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Shift Category</label>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Shift Category</label>
                 <div class="flex flex-col gap-2">
                     <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="firstHalf" onchange="handleCategoryChange()" checked class="form-radio text-blue-600 h-4 w-4">
-                        <span class="ml-2 text-sm text-gray-700">First Half</span>
+                        <input type="radio" name="shiftCategory" value="firstHalf" onchange="handleCategoryChange()" checked class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">First Half</span>
                     </label>
                     <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="secondHalf" onchange="handleCategoryChange()" class="form-radio text-blue-600 h-4 w-4">
-                        <span class="ml-2 text-sm text-gray-700">Second Half</span>
+                        <input type="radio" name="shiftCategory" value="secondHalf" onchange="handleCategoryChange()" class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                        <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Second Half</span>
                     </label>
                     <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="special" onchange="handleCategoryChange()" class="form-radio text-purple-600 h-4 w-4">
-                        <span class="ml-2 text-sm font-semibold text-purple-700">Special (Fixed Duty)</span>
+                        <input type="radio" name="shiftCategory" value="special" onchange="handleCategoryChange()" class="form-radio text-purple-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                        <span class="ml-2 text-sm font-semibold text-purple-700 dark:text-purple-400">Special (Fixed Duty)</span>
                     </label>
                 </div>
             </div>
 
             <!-- Primary TSO -->
             <div class="mb-5" id="tso-checkbox-container">
-                <label class="inline-flex items-center bg-blue-50 px-3 py-2 rounded-md border border-blue-100 w-full cursor-pointer">
-                    <input type="checkbox" id="primary-tso" onchange="handleTsoChange()" class="form-checkbox text-blue-600 h-4 w-4">
-                    <span class="ml-2 text-sm font-medium text-blue-800">Assign as Primary TSO</span>
+                <label class="inline-flex items-center bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-md border border-blue-100 dark:border-blue-800 w-full cursor-pointer transition-colors">
+                    <input type="checkbox" id="primary-tso" onchange="handleTsoChange()" class="form-checkbox text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                    <span class="ml-2 text-sm font-medium text-blue-800 dark:text-blue-300">Assign as Primary TSO</span>
                 </label>
             </div>
 
             <!-- Regular Fields -->
             <div id="regular-fields" class="mb-5 block">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Avoid Slots (Max 24)</label>
-                <p class="text-xs font-semibold text-blue-600 mb-2">Single click to select. Double click to deselect.</p>
-                <select multiple id="avoid-slots" class="w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-blue-500 transition-colors"></select>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Avoid Slots (Max 24)</label>
+                <p class="text-xs font-semibold text-blue-600 dark:text-blue-400 mb-2">Single click to select. Double click to deselect.</p>
+                <select multiple id="avoid-slots" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-blue-500 transition-colors"></select>
             </div>
 
             <!-- Special Fields -->
-            <div id="special-fields" class="mb-5 hidden bg-purple-50 p-3 rounded-md border border-purple-100">
-                <label class="block text-sm font-bold text-purple-800 mb-1">Preferred Slots (Mandatory)</label>
-                <p class="text-xs font-semibold text-purple-600 mb-2">Single click to select. Double click to deselect.<br/>(Max 4 continuous slots permitted)</p>
-                <select multiple id="preferred-slots" class="w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-purple-500 mb-3"></select>
+            <div id="special-fields" class="mb-5 hidden bg-purple-50 dark:bg-purple-900/20 p-3 rounded-md border border-purple-100 dark:border-purple-800 transition-colors">
+                <label class="block text-sm font-bold text-purple-800 dark:text-purple-300 mb-1">Preferred Slots (Mandatory)</label>
+                <p class="text-xs font-semibold text-purple-600 dark:text-purple-400 mb-2">Single click to select. Double click to deselect.<br/>(Max 4 continuous slots permitted)</p>
+                <select multiple id="preferred-slots" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-purple-500 mb-3 transition-colors"></select>
                 
-                <label class="block text-sm font-bold text-purple-800 mb-1">Position Intended</label>
-                <select id="preferred-position" class="w-full rounded-md border border-gray-300 p-2 text-sm shadow-sm focus:border-purple-500">
+                <label class="block text-sm font-bold text-purple-800 dark:text-purple-300 mb-1">Position Intended</label>
+                <select id="preferred-position" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-purple-500 transition-colors">
                     <option value="TWR">TWR</option>
                     <option value="SMC">SMC</option>
                     <option value="CLD">CLD</option>
                 </select>
             </div>
 
-            <button onclick="addATCO()" class="w-full bg-gray-800 hover:bg-black text-white font-bold py-2 px-4 rounded transition">
+            <button onclick="addATCO()" class="w-full bg-gray-800 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors">
                 + Add ATCO to Roster
             </button>
         </div>
 
         <!-- ATCO List & Actions -->
-        <div class="bg-white rounded-xl shadow-md p-6 border border-gray-200 lg:col-span-2 flex flex-col">
-            <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">Active Crew</h2>
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 border border-gray-200 dark:border-gray-700 lg:col-span-2 flex flex-col transition-colors">
+            <h2 class="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">Active Crew</h2>
             
-            <div class="flex-grow overflow-y-auto max-h-64 mb-6 border border-gray-200 rounded-md">
-                <table class="min-w-full divide-y divide-gray-200 table-fixed">
-                    <thead class="bg-gray-50">
+            <div class="flex-grow overflow-y-auto max-h-64 mb-6 border border-gray-200 dark:border-gray-700 rounded-md">
+                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 table-fixed">
+                    <thead class="bg-gray-50 dark:bg-gray-700 transition-colors">
                         <tr>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-3/12">Name</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">Type</th>
-                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">TSO</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-4/12">Prefer/Avoid</th>
-                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/12">Action</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-3/12">Name</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/12">Type</th>
+                            <th class="px-2 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-1/12">TSO</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-4/12">Prefer/Avoid</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/12">Action</th>
                         </tr>
                     </thead>
-                    <tbody id="atco-list-body" class="bg-white divide-y divide-gray-200">
+                    <tbody id="atco-list-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700 transition-colors">
                         <!-- Populated by JS -->
                     </tbody>
                 </table>
-                <div id="empty-state" class="p-4 text-center text-gray-400 text-sm italic">No ATCOs added yet.</div>
+                <div id="empty-state" class="p-4 text-center text-gray-400 dark:text-gray-500 text-sm italic">No ATCOs added yet.</div>
             </div>
 
             <div class="flex flex-col gap-3">
-                <button onclick="generateRoster()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm text-lg transition">
+                <button onclick="generateRoster()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm text-lg transition-colors">
                     Generate 24-Slot Roster
                 </button>
-                <button id="export-btn" onclick="exportPDF()" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm transition">
+                <button id="export-btn" onclick="exportPDF()" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors">
                     Export ATCO Roster to PDF
                 </button>
             </div>
 
             <!-- Compilation Logs -->
-            <div id="logs-container" class="mt-4 hidden border rounded-md p-4 bg-gray-900 text-gray-100 font-mono text-sm shadow-inner overflow-y-auto max-h-40">
+            <div id="logs-container" class="mt-4 hidden border dark:border-gray-700 rounded-md p-4 bg-gray-900 dark:bg-black text-gray-100 font-mono text-sm shadow-inner overflow-y-auto max-h-40 transition-colors">
                 <h3 class="text-white font-bold mb-2">Engine Execution Logs</h3>
                 <div class="flex gap-4 mb-2">
                     <span class="text-yellow-400">Emergency Fallbacks: <span id="log-fallbacks">0</span></span>
-                    <span class="text-cyan-400">TSO Swaps: <span id="log-swaps">0</span></span>
                 </div>
                 <ul id="log-details" class="text-xs space-y-1"></ul>
             </div>
@@ -136,22 +171,22 @@
     </div>
 
     <!-- Roster View -->
-    <div id="roster-view-container" class="hidden bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-        <div class="bg-gray-800 px-6 py-4">
+    <div id="roster-view-container" class="hidden bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700 transition-colors">
+        <div class="bg-gray-800 dark:bg-gray-900 px-6 py-4 transition-colors">
             <h2 class="text-xl font-bold text-white">Daily Deployment Timeline</h2>
         </div>
         <div class="overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-200 border-collapse">
-                <thead class="bg-gray-50">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border-collapse">
+                <thead class="bg-gray-50 dark:bg-gray-700 transition-colors">
                     <tr>
-                        <th class="px-6 py-3 border text-left text-xs font-bold text-gray-700 uppercase tracking-wider w-32 bg-gray-100">Time (UTC)</th>
-                        <th class="px-6 py-3 border text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-1/5">TWR</th>
-                        <th class="px-6 py-3 border text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-1/5">SMC</th>
-                        <th class="px-6 py-3 border text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-1/5">CLD</th>
-                        <th class="px-6 py-3 border text-center text-xs font-bold text-gray-700 uppercase tracking-wider w-1/5 bg-blue-50 text-blue-900">TSO</th>
+                        <th class="px-6 py-3 border border-gray-200 dark:border-gray-600 text-left text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider w-32 bg-gray-100 dark:bg-gray-800">Time (UTC)</th>
+                        <th class="px-6 py-3 border border-gray-200 dark:border-gray-600 text-center text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider w-1/5">TWR</th>
+                        <th class="px-6 py-3 border border-gray-200 dark:border-gray-600 text-center text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider w-1/5">SMC</th>
+                        <th class="px-6 py-3 border border-gray-200 dark:border-gray-600 text-center text-xs font-bold text-gray-700 dark:text-gray-200 uppercase tracking-wider w-1/5">CLD</th>
+                        <th class="px-6 py-3 border border-gray-200 dark:border-gray-600 text-center text-xs font-bold text-blue-900 dark:text-blue-300 uppercase tracking-wider w-1/5 bg-blue-50 dark:bg-blue-900/30">TSO</th>
                     </tr>
                 </thead>
-                <tbody id="roster-table-body" class="bg-white divide-y divide-gray-200">
+                <tbody id="roster-table-body" class="divide-y divide-gray-200 dark:divide-gray-700 transition-colors">
                     <!-- Populated by JS -->
                 </tbody>
             </table>
@@ -163,7 +198,7 @@
     // --- State & Constants ---
     let atcos = [];
     let rosterGrid = [];
-    let generationLogs = { fallbacks: 0, swaps: 0, details: [] };
+    let generationLogs = { fallbacks: 0, details: [] };
     const POSITIONS = ['TWR', 'SMC', 'CLD', 'TSO'];
     
     // Shift starts at 13:30 UTC
@@ -263,11 +298,10 @@
         avoidSlots.disabled = isTso;
         
         if (isTso) {
-            avoidSlots.classList.add('opacity-50', 'bg-gray-100', 'cursor-not-allowed');
-            // Clear any previously selected avoid slots so they don't apply while TSO is checked
+            avoidSlots.classList.add('opacity-50', 'bg-gray-100', 'dark:bg-gray-800', 'cursor-not-allowed');
             Array.from(avoidSlots.options).forEach(opt => opt.selected = false);
         } else {
-            avoidSlots.classList.remove('opacity-50', 'bg-gray-100', 'cursor-not-allowed');
+            avoidSlots.classList.remove('opacity-50', 'bg-gray-100', 'dark:bg-gray-800', 'cursor-not-allowed');
         }
     }
 
@@ -285,19 +319,22 @@
             document.getElementById('tso-checkbox-container').classList.add('opacity-50');
             regularFields.classList.add('hidden');
             specialFields.classList.remove('hidden');
-            handleTsoChange(); // Sync disabled states
+            handleTsoChange(); 
         } else {
             tsoCheckbox.disabled = false;
             document.getElementById('tso-checkbox-container').classList.remove('opacity-50');
             regularFields.classList.remove('hidden');
             specialFields.classList.add('hidden');
-            handleTsoChange(); // Sync disabled states based on checkbox
+            handleTsoChange(); 
         }
     }
 
     function addATCO() {
         const nameInput = document.getElementById('atco-name');
-        const name = nameInput.value.trim();
+        
+        // Auto convert name to UPPERCASE
+        const name = nameInput.value.trim().toUpperCase();
+        
         if (!name) return alert("Please enter ATCO name.");
 
         const category = document.querySelector('input[name="shiftCategory"]:checked').value;
@@ -337,7 +374,7 @@
         Array.from(document.getElementById('avoid-slots').options).forEach(opt => opt.selected = false);
         Array.from(document.getElementById('preferred-slots').options).forEach(opt => opt.selected = false);
         document.getElementById('primary-tso').checked = false;
-        handleTsoChange(); // Re-enable avoid slots for the next entry
+        handleTsoChange(); 
         renderATCOList();
     }
 
@@ -365,10 +402,10 @@
             emptyState.classList.add('hidden');
             atcos.forEach(atco => {
                 let badge = atco.category === 'special' ? 
-                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 text-purple-800">Special</span>' : 
-                    `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${atco.category === 'firstHalf' ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}">${atco.category === 'firstHalf' ? 'First Half' : 'Second Half'}</span>`;
+                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">Special</span>' : 
+                    `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${atco.category === 'firstHalf' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200' : 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'}">${atco.category === 'firstHalf' ? 'First Half' : 'Second Half'}</span>`;
                 
-                let tsoBadge = atco.isTso ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-gray-400 font-bold">-</span>';
+                let tsoBadge = atco.isTso ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>';
                 
                 // Color-coded Slots Column with position info and dash fallback
                 let slotsStr = '';
@@ -376,22 +413,20 @@
                 
                 if (atco.category === 'special') {
                     slotsStr = atco.preferredSlots.length > 0 ? `${atco.preferredPosition}: ${atco.preferredSlots.join(', ')}` : '-';
-                    slotsClass = atco.preferredSlots.length > 0 ? 'text-green-600' : 'text-gray-400 font-bold';
+                    slotsClass = atco.preferredSlots.length > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-600 font-bold';
                 } else {
                     slotsStr = atco.avoidSlots.length > 0 ? atco.avoidSlots.join(', ') : '-';
-                    slotsClass = atco.avoidSlots.length > 0 ? 'text-red-600' : 'text-gray-400 font-bold';
+                    slotsClass = atco.avoidSlots.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-600 font-bold';
                 }
                 
-                // Allow it to span full column width and truncate cleanly
                 let slotsDisplay = `<span class="font-semibold text-xs block truncate w-full ${slotsClass}" title="${slotsStr}">${slotsStr}</span>`;
 
-                // Order: Remove button FIRST, Toggle button SECOND
-                let actionButtons = `<button onclick="removeATCO('${atco.id}')" class="text-red-600 font-bold hover:underline mr-4 focus:outline-none">Remove</button>`;
+                let actionButtons = `<button onclick="removeATCO('${atco.id}')" class="text-red-600 dark:text-red-400 font-bold hover:underline mr-4 focus:outline-none">Remove</button>`;
 
                 if (atco.category !== 'special') {
                     let isSecondHalf = atco.category === 'secondHalf';
                     actionButtons += `
-                        <button onclick="toggleShift('${atco.id}')" title="Swap First/Second Half" class="relative inline-flex items-center h-6 w-12 rounded-full transition-colors focus:outline-none shadow-inner ${isSecondHalf ? 'bg-indigo-500' : 'bg-blue-400'}">
+                        <button onclick="toggleShift('${atco.id}')" title="Swap First/Second Half" class="relative inline-flex items-center h-6 w-12 rounded-full transition-colors focus:outline-none shadow-inner ${isSecondHalf ? 'bg-indigo-500' : 'bg-blue-400 dark:bg-blue-500'}">
                             <span class="absolute left-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'block' : 'hidden'}">SH</span>
                             <span class="absolute right-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'hidden' : 'block'}">FH</span>
                             <span class="inline-block z-10 w-4 h-4 transform bg-white rounded-full shadow transition-transform ${isSecondHalf ? 'translate-x-7' : 'translate-x-1'}"></span>
@@ -401,7 +436,7 @@
                 
                 tbody.innerHTML += `
                     <tr>
-                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 truncate" title="${atco.name}">${atco.name}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title="${atco.name}">${atco.name}</td>
                         <td class="px-4 py-2 whitespace-nowrap">${badge}</td>
                         <td class="px-2 py-2 whitespace-nowrap text-center">${tsoBadge}</td>
                         <td class="px-4 py-2 whitespace-nowrap">${slotsDisplay}</td>
@@ -421,7 +456,7 @@
         if (atcos.length === 0) return alert("Add at least one ATCO.");
 
         rosterGrid = Array.from({length: 24}, () => ({ TWR: null, SMC: null, CLD: null, TSO: null }));
-        generationLogs = { fallbacks: 0, swaps: 0, details: [] };
+        generationLogs = { fallbacks: 0, details: [] };
         
         atcos.forEach(a => {
             a.minsWorked = 0;
@@ -440,6 +475,7 @@
                 }
             });
 
+            // 2. TSO processed next, followed by remaining vacant positions
             const order = ['TSO', 'TWR', 'SMC', 'CLD'];
             
             for (let pos of order) {
@@ -451,14 +487,20 @@
                 let scoredPool = pool.map(a => {
                     let score = a.minsWorked * 1000;
                     let legalBreak = true;
-                    let legalHours = a.continuousSlots < 4;
                     
+                    // TSO is exempt from the 2-hour (4 slot) limitation
+                    let legalHours = (pos === 'TSO') ? true : (a.continuousSlots < 4);
+                    
+                    // Continuation bonus
                     if (a.lastPosition === pos && legalHours) {
                         score -= 100000;
                     }
+                    
+                    // Mandatory 30-min break requirement applies universally when switching positions
                     if (a.lastPosition !== null && a.lastPosition !== pos && a.continuousSlots > 0) {
                         legalBreak = false;
                     }
+                    
                     if (a.avoidSlots.includes(slot)) {
                         score += 500000;
                     }
@@ -481,18 +523,7 @@
                     continue;
                 }
 
-                if (pos !== 'TSO') {
-                    let tsoAtco = rosterGrid[slot]['TSO'];
-                    if (tsoAtco && tsoAtco.category !== 'special') {
-                        generationLogs.swaps++;
-                        generationLogs.details.push(`<span class="text-cyan-400">[Slot ${slot}] TSO Swap: ${tsoAtco.name} pulled from TSO to save ${pos}</span>`);
-                        rosterGrid[slot][pos] = tsoAtco;
-                        updateStateAssign(tsoAtco, pos);
-                        rosterGrid[slot]['TSO'] = null; 
-                        continue;
-                    }
-                }
-
+                // Tier 2: Break Emergency (No 30 min break)
                 let tier2 = scoredPool.filter(c => c.legalHours);
                 if (tier2.length > 0) {
                     generationLogs.fallbacks++;
@@ -502,6 +533,7 @@
                     continue;
                 }
 
+                // Tier 3: Exhaustion Emergency (Breach 2 hours)
                 if (scoredPool.length > 0) {
                     generationLogs.fallbacks++;
                     generationLogs.details.push(`<span class="text-red-400 font-bold">[Slot ${slot}] Exhaustion Override: ${scoredPool[0].atco.name} breached 2hr limit on ${pos}</span>`);
@@ -534,7 +566,6 @@
         const container = document.getElementById('logs-container');
         container.classList.remove('hidden');
         document.getElementById('log-fallbacks').innerText = generationLogs.fallbacks;
-        document.getElementById('log-swaps').innerText = generationLogs.swaps;
         
         const detailsUl = document.getElementById('log-details');
         if (generationLogs.details.length === 0) {
@@ -552,10 +583,11 @@
         
         for (let r = 0; r < 24; r++) {
             let tr = document.createElement('tr');
-            tr.className = r % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+            // Alternating rows adapt to dark mode beautifully
+            tr.className = r % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/80';
             
             let tdTime = document.createElement('td');
-            tdTime.className = "px-6 py-2 border whitespace-nowrap text-xs font-medium text-gray-900 bg-gray-100";
+            tdTime.className = "px-6 py-2 border border-gray-200 dark:border-gray-600 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-700";
             tdTime.innerText = getSlotTimeRange(r);
             tr.appendChild(tdTime);
 
@@ -566,7 +598,7 @@
 
                 let atco = rosterGrid[r][pos];
                 let td = document.createElement('td');
-                td.className = "border text-center text-xs font-bold p-0 relative h-10";
+                td.className = "border border-gray-200 dark:border-gray-600 text-center text-xs font-bold p-0 relative h-10";
                 
                 if (atco) {
                     let span = 1;
@@ -583,13 +615,13 @@
                     let colorCode = stringToColorHex(atco.name);
                     
                     td.innerHTML = `
-                        <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm text-gray-800" style="background-color: ${colorCode}40; border-left: 4px solid ${colorCode}">
-                            <span class="text-[10px] text-gray-600 block mb-1">${startTime} - ${endTime}</span>
+                        <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm text-gray-900" style="background-color: ${colorCode}40; border-left: 4px solid ${colorCode}">
+                            <span class="text-[10px] opacity-80 block mb-1">${startTime} - ${endTime}</span>
                             <span>${atco.name}</span>
                         </div>
                     `;
                 } else {
-                    td.innerHTML = `<span class="text-gray-300">-</span>`;
+                    td.innerHTML = `<span class="text-gray-300 dark:text-gray-600">-</span>`;
                 }
                 tr.appendChild(td);
             }
@@ -599,7 +631,6 @@
         calculateViewData();
     }
 
-    // Added startIndex so cross-midnight slots sort chronologically in the summary
     function calculateViewData() {
         atcos.forEach(a => a.workedBlocks = []);
         const order = ['TWR', 'SMC', 'CLD', 'TSO'];
@@ -621,7 +652,6 @@
                     }
                 }
             }
-            // Sort by absolute slot index, avoiding midnight-crossing string issues
             a.workedBlocks.sort((b1, b2) => b1.startIndex - b2.startIndex);
         }
     }
