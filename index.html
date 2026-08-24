@@ -475,13 +475,25 @@
                 }
             });
 
-            // 2. TSO processed next, followed by remaining vacant positions
+            // 2. Filter remaining positions
             const order = ['TSO', 'TWR', 'SMC', 'CLD'];
             
             for (let pos of order) {
                 if (rosterGrid[slot][pos] !== null) continue;
 
+                // Grab all standard ATCOs
                 let pool = atcos.filter(a => a.category !== 'special');
+                
+                // --- NEW MANNING RULE ---
+                // Slots 0-7 (First 4 hours): Both First Half & Second Half are considered.
+                // Slots 8-15 (Next 4 hours): ONLY First Half are considered.
+                // Slots 16-23 (Last 4 hours): ONLY Second Half are considered.
+                if (slot >= 8 && slot <= 15) {
+                    pool = pool.filter(a => a.category === 'firstHalf');
+                } else if (slot >= 16 && slot <= 23) {
+                    pool = pool.filter(a => a.category === 'secondHalf');
+                }
+
                 if (pos === 'TSO') pool = pool.filter(a => a.isTso);
                 
                 let scoredPool = pool.map(a => {
