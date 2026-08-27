@@ -8,15 +8,15 @@
     <!-- Owl Emoji Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
 
+    <!-- Tailwind CSS (CDN loaded first) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- Tailwind CSS Config for Dark Mode -->
     <script>
-        tailwind = {
-            config: {
-                darkMode: 'class',
-            }
-        }
+        tailwind.config = {
+            darkMode: 'class'
+        };
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- jsPDF & AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -29,27 +29,44 @@
         select[multiple] option:checked { background-color: #3b82f6 !important; color: white; }
     </style>
 
-    <!-- Theme Initialization -->
+    <!-- Fail-Safe Theme Initialization -->
     <script>
-        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        // Wrapping local storage in try-catch prevents the app from crashing on local file:// execution
+        function getTheme() {
+            try { return localStorage.getItem('theme'); } catch (e) { return null; }
+        }
+        function setTheme(theme) {
+            try { localStorage.setItem('theme', theme); } catch (e) {}
+        }
+
+        // Execute immediately to prevent flash of unstyled content
+        const savedTheme = getTheme();
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+        if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
         }
+
+        // Toggle function bound to the UI button
         function toggleTheme() {
             document.documentElement.classList.toggle('dark');
-            localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+            const isDark = document.documentElement.classList.contains('dark');
+            setTheme(isDark ? 'dark' : 'light');
         }
     </script>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans transition-colors duration-200">
 
-<!-- Dark Mode Toggle Button -->
-<button onclick="toggleTheme()" class="absolute top-4 right-4 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors focus:outline-none shadow-sm">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 dark:hidden block" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+<!-- Dark Mode Toggle Button (Added z-50 to ensure it is always clickable) -->
+<button onclick="toggleTheme()" class="absolute top-4 right-4 z-50 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors focus:outline-none shadow-sm cursor-pointer">
+    <!-- Moon Icon (Visible in Light Mode) -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 block dark:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
     </svg>
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 dark:block hidden text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <!-- Sun Icon (Visible in Dark Mode) -->
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden dark:block text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
         <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
     </svg>
 </button>
@@ -79,16 +96,16 @@
             <div class="mb-5">
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Shift Category</label>
                 <div class="flex flex-col gap-2">
-                    <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="firstHalf" onchange="handleCategoryChange()" checked class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="shiftCategory" value="firstHalf" onchange="handleCategoryChange()" checked class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 cursor-pointer">
                         <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">First Half</span>
                     </label>
-                    <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="secondHalf" onchange="handleCategoryChange()" class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="shiftCategory" value="secondHalf" onchange="handleCategoryChange()" class="form-radio text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 cursor-pointer">
                         <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Second Half</span>
                     </label>
-                    <label class="inline-flex items-center">
-                        <input type="radio" name="shiftCategory" value="special" onchange="handleCategoryChange()" class="form-radio text-purple-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="shiftCategory" value="special" onchange="handleCategoryChange()" class="form-radio text-purple-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 cursor-pointer">
                         <span class="ml-2 text-sm font-semibold text-purple-700 dark:text-purple-400">Special (Fixed Duty)</span>
                     </label>
                 </div>
@@ -97,7 +114,7 @@
             <!-- Primary TSO -->
             <div class="mb-5" id="tso-checkbox-container">
                 <label class="inline-flex items-center bg-blue-50 dark:bg-blue-900/20 px-3 py-2 rounded-md border border-blue-100 dark:border-blue-800 w-full cursor-pointer transition-colors">
-                    <input type="checkbox" id="primary-tso" onchange="handleTsoChange()" class="form-checkbox text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500">
+                    <input type="checkbox" id="primary-tso" onchange="handleTsoChange()" class="form-checkbox text-blue-600 h-4 w-4 bg-gray-100 dark:bg-gray-600 border-gray-300 dark:border-gray-500 cursor-pointer">
                     <span class="ml-2 text-sm font-medium text-blue-800 dark:text-blue-300">Assign as Primary TSO</span>
                 </label>
             </div>
@@ -116,14 +133,14 @@
                 <select multiple id="preferred-slots" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-purple-500 mb-3 transition-colors"></select>
                 
                 <label class="block text-sm font-bold text-purple-800 dark:text-purple-300 mb-1">Position Intended</label>
-                <select id="preferred-position" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-purple-500 transition-colors">
+                <select id="preferred-position" class="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white p-2 text-sm shadow-sm focus:border-purple-500 transition-colors cursor-pointer">
                     <option value="TWR">TWR</option>
                     <option value="SMC">SMC</option>
                     <option value="CLD">CLD</option>
                 </select>
             </div>
 
-            <button onclick="addATCO()" class="w-full bg-gray-800 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors">
+            <button onclick="addATCO()" class="w-full bg-gray-800 dark:bg-gray-700 hover:bg-black dark:hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors cursor-pointer">
                 + Add ATCO to Roster
             </button>
         </div>
@@ -151,10 +168,10 @@
             </div>
 
             <div class="flex flex-col gap-3">
-                <button onclick="generateRoster()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm text-lg transition-colors">
+                <button onclick="generateRoster()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-sm text-lg transition-colors cursor-pointer">
                     Generate 24-Slot Roster
                 </button>
-                <button id="export-btn" onclick="exportPDF()" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors">
+                <button id="export-btn" onclick="exportPDF()" class="hidden w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm transition-colors cursor-pointer">
                     Export ATCO Roster to PDF
                 </button>
             </div>
@@ -221,12 +238,15 @@
 
         select.addEventListener('mousedown', function(e) {
             e.preventDefault(); 
+            
+            // Block interaction if select is disabled (e.g., TSO is checked)
             if (select.disabled) return;
             
             if (e.target.tagName === 'OPTION') {
                 const currentTime = new Date().getTime();
                 const timeDiff = currentTime - lastClickTime;
                 
+                // Double click threshold (400ms) to deselect
                 if (lastClickedOption === e.target && timeDiff < 400) {
                     e.target.selected = false;
                     lastClickTime = 0; 
@@ -244,6 +264,7 @@
         });
     }
 
+    // Prevents more than 4 continuous slots from being selected
     function validateContinuous(selectElement, changedOption) {
         let selected = Array.from(selectElement.selectedOptions).map(o => parseInt(o.value));
         if (selected.length <= 4) return;
@@ -264,10 +285,11 @@
         
         if (maxCont > 4) {
             alert("Operational Restriction: You can only select a maximum of 4 continuous Preferred Slots (2 Hours).");
-            changedOption.selected = false; 
+            changedOption.selected = false; // Revert click
         }
     }
 
+    // Populate Menus & Attach Listeners
     window.onload = () => {
         const avoidSelect = document.getElementById('avoid-slots');
         const prefSelect = document.getElementById('preferred-slots');
@@ -284,6 +306,8 @@
     };
 
     // --- UI Interactions ---
+    
+    // Function to disable Avoid slots if TSO is checked
     function handleTsoChange() {
         const isTso = document.getElementById('primary-tso').checked;
         const avoidSlots = document.getElementById('avoid-slots');
@@ -324,6 +348,8 @@
 
     function addATCO() {
         const nameInput = document.getElementById('atco-name');
+        
+        // Auto convert name to UPPERCASE
         const name = nameInput.value.trim().toUpperCase();
         
         if (!name) return alert("Please enter ATCO name.");
@@ -398,6 +424,7 @@
                 
                 let tsoBadge = atco.isTso ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>';
                 
+                // Color-coded Slots Column with position info and dash fallback
                 let slotsStr = '';
                 let slotsClass = '';
                 
@@ -411,12 +438,12 @@
                 
                 let slotsDisplay = `<span class="font-semibold text-xs block truncate w-full ${slotsClass}" title="${slotsStr}">${slotsStr}</span>`;
 
-                let actionButtons = `<button onclick="removeATCO('${atco.id}')" class="text-red-600 dark:text-red-400 font-bold hover:underline mr-4 focus:outline-none">Remove</button>`;
+                let actionButtons = `<button onclick="removeATCO('${atco.id}')" class="text-red-600 dark:text-red-400 font-bold hover:underline mr-4 focus:outline-none cursor-pointer">Remove</button>`;
 
                 if (atco.category !== 'special') {
                     let isSecondHalf = atco.category === 'secondHalf';
                     actionButtons += `
-                        <button onclick="toggleShift('${atco.id}')" title="Swap First/Second Half" class="relative inline-flex items-center h-6 w-12 rounded-full transition-colors focus:outline-none shadow-inner ${isSecondHalf ? 'bg-indigo-500' : 'bg-blue-400 dark:bg-blue-500'}">
+                        <button onclick="toggleShift('${atco.id}')" title="Swap First/Second Half" class="relative inline-flex items-center h-6 w-12 rounded-full transition-colors focus:outline-none shadow-inner cursor-pointer ${isSecondHalf ? 'bg-indigo-500' : 'bg-blue-400 dark:bg-blue-500'}">
                             <span class="absolute left-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'block' : 'hidden'}">SH</span>
                             <span class="absolute right-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'hidden' : 'block'}">FH</span>
                             <span class="inline-block z-10 w-4 h-4 transform bg-white rounded-full shadow transition-transform ${isSecondHalf ? 'translate-x-7' : 'translate-x-1'}"></span>
