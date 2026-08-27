@@ -8,15 +8,15 @@
     <!-- Owl Emoji Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
 
-    <!-- Tailwind CSS (Must load BEFORE the config) -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    
     <!-- Tailwind CSS Config for Dark Mode -->
     <script>
-        tailwind.config = {
-            darkMode: 'class',
+        tailwind = {
+            config: {
+                darkMode: 'class',
+            }
         }
     </script>
+    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- jsPDF & AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -31,14 +31,11 @@
 
     <!-- Theme Initialization -->
     <script>
-        // Check local storage or system preference on first load
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
         }
-        
-        // Toggle function bound to the button
         function toggleTheme() {
             document.documentElement.classList.toggle('dark');
             localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
@@ -224,15 +221,12 @@
 
         select.addEventListener('mousedown', function(e) {
             e.preventDefault(); 
-            
-            // Block interaction if select is disabled (e.g., TSO is checked)
             if (select.disabled) return;
             
             if (e.target.tagName === 'OPTION') {
                 const currentTime = new Date().getTime();
                 const timeDiff = currentTime - lastClickTime;
                 
-                // Double click threshold (400ms) to deselect
                 if (lastClickedOption === e.target && timeDiff < 400) {
                     e.target.selected = false;
                     lastClickTime = 0; 
@@ -250,7 +244,6 @@
         });
     }
 
-    // Prevents more than 4 continuous slots from being selected
     function validateContinuous(selectElement, changedOption) {
         let selected = Array.from(selectElement.selectedOptions).map(o => parseInt(o.value));
         if (selected.length <= 4) return;
@@ -271,11 +264,10 @@
         
         if (maxCont > 4) {
             alert("Operational Restriction: You can only select a maximum of 4 continuous Preferred Slots (2 Hours).");
-            changedOption.selected = false; // Revert click
+            changedOption.selected = false; 
         }
     }
 
-    // Populate Menus & Attach Listeners
     window.onload = () => {
         const avoidSelect = document.getElementById('avoid-slots');
         const prefSelect = document.getElementById('preferred-slots');
@@ -292,8 +284,6 @@
     };
 
     // --- UI Interactions ---
-    
-    // Function to disable Avoid slots if TSO is checked
     function handleTsoChange() {
         const isTso = document.getElementById('primary-tso').checked;
         const avoidSlots = document.getElementById('avoid-slots');
@@ -334,8 +324,6 @@
 
     function addATCO() {
         const nameInput = document.getElementById('atco-name');
-        
-        // Auto convert name to UPPERCASE
         const name = nameInput.value.trim().toUpperCase();
         
         if (!name) return alert("Please enter ATCO name.");
@@ -410,7 +398,6 @@
                 
                 let tsoBadge = atco.isTso ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>';
                 
-                // Color-coded Slots Column with position info and dash fallback
                 let slotsStr = '';
                 let slotsClass = '';
                 
@@ -454,7 +441,7 @@
         }
     }
 
-    // --- Core Solver Engine ---
+    // --- Core Unified Solver Engine ---
     function generateRoster() {
         if (atcos.length === 0) return alert("Add at least one ATCO.");
 
@@ -469,7 +456,7 @@
 
         for (let slot = 0; slot < 24; slot++) {
             
-            // 1. Process SPECIAL ATCOs first (Immune to all manning & segregation rules)
+            // 1. Process SPECIAL ATCOs first (Immune to all rules)
             let specialCandidates = atcos.filter(a => a.category === 'special' && a.preferredSlots.includes(slot));
             specialCandidates.forEach(sp => {
                 if (POSITIONS.includes(sp.preferredPosition) && sp.preferredPosition !== 'TSO') {
@@ -484,104 +471,72 @@
             for (let pos of order) {
                 if (rosterGrid[slot][pos] !== null) continue;
 
-                // Grab all standard ATCOs (excluding the immune Special ones)
+                // Base pool excludes special ATCOs
                 let pool = atcos.filter(a => a.category !== 'special');
-                
-                // --- RULE: TIMELINE SEGREGATION ---
-                // Slots 0-7 (First 4 hours): Common Half - Both FH & SH considered.
-                // Slots 8-15 (Next 4 hours): ONLY First Half are considered.
-                // Slots 16-23 (Last 4 hours): ONLY Second Half are considered.
-                if (slot >= 8 && slot <= 15) {
-                    pool = pool.filter(a => a.category === 'firstHalf');
-                } else if (slot >= 16 && slot <= 23) {
-                    pool = pool.filter(a => a.category === 'secondHalf');
-                }
 
                 // --- RULE: NO DOUBLE MANNING ---
-                // Identify anyone already seated at a console during this exact slot
-                // and remove them from the available pool to prevent double-booking.
+                // Physically removes any ATCO already seated in this 30-min slot.
                 let assignedThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null);
                 pool = pool.filter(a => !assignedThisSlot.includes(a));
 
                 // Restrict TSO console to qualified staff
                 if (pos === 'TSO') pool = pool.filter(a => a.isTso);
-                
+
+                // Physical constraint failure (e.g. 3 ATCOs available for 4 positions)
+                if (pool.length === 0) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-red-500 font-bold bg-red-100 dark:bg-red-900/50 px-1 rounded">[Slot ${slot}] UNMANNED CONSOLE: Insufficient staff available for ${pos}</span>`);
+                    continue; 
+                }
+
+                // --- UNIFIED PENALTY SCORING ---
                 let scoredPool = pool.map(a => {
                     let score = a.minsWorked * 1000;
-                    let legalBreak = true;
                     
-                    // TSO is exempt from the 2-hour (4 slot) limitation
                     let legalHours = (pos === 'TSO') ? true : (a.continuousSlots < 4);
+                    let legalBreak = true;
+                    if (a.lastPosition !== null && a.lastPosition !== pos && a.continuousSlots > 0) legalBreak = false;
                     
-                    // Continuation bonus
-                    if (a.lastPosition === pos && legalHours) {
-                        score -= 100000;
-                    }
-                    
-                    // Mandatory 30-min break requirement applies universally when switching positions
-                    if (a.lastPosition !== null && a.lastPosition !== pos && a.continuousSlots > 0) {
-                        legalBreak = false;
-                    }
-                    
-                    if (a.avoidSlots.includes(slot)) {
-                        score += 500000;
-                    }
+                    // --- RULE: TIMELINE SEGREGATION ---
+                    let isWrongHalf = false;
+                    if (slot >= 8 && slot <= 15 && a.category === 'secondHalf') isWrongHalf = true;
+                    if (slot >= 16 && slot <= 23 && a.category === 'firstHalf') isWrongHalf = true;
 
-                    // --- RULE: TSO ORGANIC SWAP PENALTY ---
-                    // By penalizing TSOs from taking operational positions (TWR/SMC/CLD), 
-                    // we keep them available for the TSO slot. If they *must* be pulled 
-                    // to an operational console due to shortage, the TSO slot will then 
-                    // organically pick the *other* available TSO from the remaining pool.
-                    if (pos !== 'TSO' && a.isTso) {
-                        score += 50000; 
-                    }
+                    // Apply Bonuses
+                    if (a.lastPosition === pos && legalHours) score -= 100000;
+                    if (pos !== 'TSO' && a.isTso) score += 50000; // Deprioritizes TSO taking normal console
 
-                    return { atco: a, score, legalBreak, legalHours, avoids: a.avoidSlots.includes(slot) };
+                    // Apply Progressive Penalties
+                    let avoids = a.avoidSlots.includes(slot);
+                    if (avoids) score += 500000;            // Tier 1.5 
+                    if (!legalBreak) score += 2000000;      // Tier 2 
+                    if (!legalHours) score += 5000000;      // Tier 3 
+                    if (isWrongHalf) score += 10000000;     // Tier 4 (Absolute Emergency to avoid Unmanned console)
+
+                    return { atco: a, score, legalBreak, legalHours, avoids, isWrongHalf };
                 });
 
                 scoredPool.sort((a, b) => a.score - b.score);
+                let best = scoredPool[0];
 
-                let valid = scoredPool.filter(c => c.legalBreak && c.legalHours && !c.avoids);
-                if (valid.length > 0) {
-                    rosterGrid[slot][pos] = valid[0].atco;
-                    updateStateAssign(valid[0].atco, pos);
-                    continue;
-                }
-                
-                let validAvoid = scoredPool.filter(c => c.legalBreak && c.legalHours);
-                if (validAvoid.length > 0) {
-                    rosterGrid[slot][pos] = validAvoid[0].atco;
-                    updateStateAssign(validAvoid[0].atco, pos);
-                    continue;
-                }
+                rosterGrid[slot][pos] = best.atco;
+                updateStateAssign(best.atco, pos);
 
-                // Tier 2: Break Emergency (No 30 min break)
-                let tier2 = scoredPool.filter(c => c.legalHours);
-                if (tier2.length > 0) {
+                // Log the exact rule that was bypassed to get a body in the seat
+                if (best.isWrongHalf) {
                     generationLogs.fallbacks++;
-                    generationLogs.details.push(`<span class="text-yellow-400">[Slot ${slot}] Break Override: ${tier2[0].atco.name} forced to ${pos}</span>`);
-                    rosterGrid[slot][pos] = tier2[0].atco;
-                    updateStateAssign(tier2[0].atco, pos);
-                    continue;
-                }
-
-                // Tier 3: Exhaustion Emergency (Breach 2 hours)
-                if (scoredPool.length > 0) {
+                    generationLogs.details.push(`<span class="text-purple-500 dark:text-purple-400 font-bold">[Slot ${slot}] Segregation Override: ${best.atco.name} pulled from off-shift to man ${pos}</span>`);
+                } else if (!best.legalHours) {
                     generationLogs.fallbacks++;
-                    generationLogs.details.push(`<span class="text-red-400 font-bold">[Slot ${slot}] Exhaustion Override: ${scoredPool[0].atco.name} breached 2hr limit on ${pos}</span>`);
-                    rosterGrid[slot][pos] = scoredPool[0].atco;
-                    updateStateAssign(scoredPool[0].atco, pos);
-                    continue;
+                    generationLogs.details.push(`<span class="text-red-500 dark:text-red-400 font-bold">[Slot ${slot}] Exhaustion Override: ${best.atco.name} breached 2hr limit on ${pos}</span>`);
+                } else if (!best.legalBreak) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-yellow-500 dark:text-yellow-400 font-bold">[Slot ${slot}] Break Override: ${best.atco.name} forced to ${pos}</span>`);
+                } else if (best.avoids) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-orange-500 dark:text-orange-400">[Slot ${slot}] Avoid Override: ${best.atco.name} mapped to avoided slot for ${pos}</span>`);
                 }
             }
-
-            atcos.forEach(a => {
-                let activeThisSlot = POSITIONS.some(p => rosterGrid[slot][p] === a);
-                if (!activeThisSlot) {
-                    a.continuousSlots = 0;
-                    a.lastPosition = null;
-                }
-            });
         }
         renderRosterUI();
         renderLogs();
@@ -601,7 +556,7 @@
         
         const detailsUl = document.getElementById('log-details');
         if (generationLogs.details.length === 0) {
-            detailsUl.innerHTML = '<li class="text-green-400">Perfect compilation. 0 Fallbacks.</li>';
+            detailsUl.innerHTML = '<li class="text-green-500 dark:text-green-400 font-bold">Perfect compilation. 0 Rule Overrides.</li>';
         } else {
             detailsUl.innerHTML = generationLogs.details.map(d => `<li>${d}</li>`).join('');
         }
@@ -615,7 +570,6 @@
         
         for (let r = 0; r < 24; r++) {
             let tr = document.createElement('tr');
-            // Alternating rows adapt to dark mode beautifully
             tr.className = r % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/80';
             
             let tdTime = document.createElement('td');
