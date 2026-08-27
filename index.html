@@ -8,15 +8,15 @@
     <!-- Owl Emoji Favicon -->
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦉</text></svg>">
 
+    <!-- Tailwind CSS (Must load BEFORE the config) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- Tailwind CSS Config for Dark Mode -->
     <script>
-        tailwind = {
-            config: {
-                darkMode: 'class',
-            }
+        tailwind.config = {
+            darkMode: 'class',
         }
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
     
     <!-- jsPDF & AutoTable -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -31,11 +31,14 @@
 
     <!-- Theme Initialization -->
     <script>
+        // Check local storage or system preference on first load
         if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
             document.documentElement.classList.add('dark');
         } else {
             document.documentElement.classList.remove('dark');
         }
+        
+        // Toggle function bound to the button
         function toggleTheme() {
             document.documentElement.classList.toggle('dark');
             localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
@@ -466,7 +469,7 @@
 
         for (let slot = 0; slot < 24; slot++) {
             
-            // 1. Process SPECIAL ATCOs first
+            // 1. Process SPECIAL ATCOs first (Immune to all manning & segregation rules)
             let specialCandidates = atcos.filter(a => a.category === 'special' && a.preferredSlots.includes(slot));
             specialCandidates.forEach(sp => {
                 if (POSITIONS.includes(sp.preferredPosition) && sp.preferredPosition !== 'TSO') {
@@ -475,17 +478,17 @@
                 }
             });
 
-            // 2. Filter remaining positions
-            const order = ['TSO', 'TWR', 'SMC', 'CLD'];
+            // 2. Evaluate Operational Consoles FIRST, TSO LAST (Enables organic TSO swapping)
+            const order = ['TWR', 'SMC', 'CLD', 'TSO'];
             
             for (let pos of order) {
                 if (rosterGrid[slot][pos] !== null) continue;
 
-                // Grab all standard ATCOs
+                // Grab all standard ATCOs (excluding the immune Special ones)
                 let pool = atcos.filter(a => a.category !== 'special');
                 
-                // --- NEW MANNING RULE ---
-                // Slots 0-7 (First 4 hours): Both First Half & Second Half are considered.
+                // --- RULE: TIMELINE SEGREGATION ---
+                // Slots 0-7 (First 4 hours): Common Half - Both FH & SH considered.
                 // Slots 8-15 (Next 4 hours): ONLY First Half are considered.
                 // Slots 16-23 (Last 4 hours): ONLY Second Half are considered.
                 if (slot >= 8 && slot <= 15) {
@@ -494,6 +497,13 @@
                     pool = pool.filter(a => a.category === 'secondHalf');
                 }
 
+                // --- RULE: NO DOUBLE MANNING ---
+                // Identify anyone already seated at a console during this exact slot
+                // and remove them from the available pool to prevent double-booking.
+                let assignedThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null);
+                pool = pool.filter(a => !assignedThisSlot.includes(a));
+
+                // Restrict TSO console to qualified staff
                 if (pos === 'TSO') pool = pool.filter(a => a.isTso);
                 
                 let scoredPool = pool.map(a => {
@@ -516,6 +526,16 @@
                     if (a.avoidSlots.includes(slot)) {
                         score += 500000;
                     }
+
+                    // --- RULE: TSO ORGANIC SWAP PENALTY ---
+                    // By penalizing TSOs from taking operational positions (TWR/SMC/CLD), 
+                    // we keep them available for the TSO slot. If they *must* be pulled 
+                    // to an operational console due to shortage, the TSO slot will then 
+                    // organically pick the *other* available TSO from the remaining pool.
+                    if (pos !== 'TSO' && a.isTso) {
+                        score += 50000; 
+                    }
+
                     return { atco: a, score, legalBreak, legalHours, avoids: a.avoidSlots.includes(slot) };
                 });
 
