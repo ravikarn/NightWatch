@@ -225,6 +225,8 @@
     // --- Custom Multi-Select UI Logic ---
     function setupCustomSelect(selectId, isPreferred) {
         const select = document.getElementById(selectId);
+        if (!select) return; // safety check
+        
         let lastClickTime = 0;
         let lastClickedOption = null;
 
@@ -275,20 +277,21 @@
         }
     }
 
-    window.onload = () => {
+    // DOMContentLoaded ensures the UI renders instantly without waiting for external libraries
+    document.addEventListener('DOMContentLoaded', () => {
         const avoidSelect = document.getElementById('avoid-slots');
         const prefSelect = document.getElementById('preferred-slots');
-        for (let i = 0; i < 24; i++) {
-            let timeStr = getSlotTimeRange(i);
-            let opt1 = new Option(timeStr, i);
-            let opt2 = new Option(timeStr, i);
-            avoidSelect.add(opt1);
-            prefSelect.add(opt2);
-        }
         
-        setupCustomSelect('avoid-slots', false);
-        setupCustomSelect('preferred-slots', true);
-    };
+        if (avoidSelect && prefSelect) {
+            for (let i = 0; i < 24; i++) {
+                let timeStr = getSlotTimeRange(i);
+                avoidSelect.add(new Option(timeStr, i));
+                prefSelect.add(new Option(timeStr, i));
+            }
+            setupCustomSelect('avoid-slots', false);
+            setupCustomSelect('preferred-slots', true);
+        }
+    });
 
     // --- UI Interactions ---
     function handleTsoChange() {
@@ -347,7 +350,4 @@
             let prefOpts = document.getElementById('preferred-slots').selectedOptions;
             preferredSlots = Array.from(prefOpts).map(o => parseInt(o.value));
             preferredPosition = document.getElementById('preferred-position').value;
-            if (preferredSlots.length === 0) return alert("Special ATCOs must have at least one preferred slot.");
-        } else {
-            let avoidOpts = document.getElementById('avoid-slots').selectedOptions;
-            avoidSlot
+            if (preferredSlots.leng
