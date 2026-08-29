@@ -252,8 +252,6 @@
                 });
             });
             renderATCOList();
-            
-            // Automatically generate and display the roster immediately on page load
             generateRoster();
         }
     });
@@ -469,8 +467,21 @@
                 }
             });
 
-            // 2. Strict User Hierarchy
-            const order = ['TSO', 'TWR', 'SMC', 'CLD'];
+            // 2. Dynamic User Hierarchy (Prioritize most exhausted consoles)
+            // By dynamically sorting the evaluation order based on the previous slot's continuous workload, 
+            // the system ensures the console closest to the 2-hour exhaustion limit always gets first pick 
+            // of the rested personnel, completely eliminating the Greedy Allocation Trap.
+            let order = ['TWR', 'SMC', 'CLD'];
+            if (slot > 0) {
+                order.sort((p1, p2) => {
+                    let a1 = rosterGrid[slot-1][p1];
+                    let a2 = rosterGrid[slot-1][p2];
+                    let c1 = a1 ? a1.continuousSlots : 0;
+                    let c2 = a2 ? a2.continuousSlots : 0;
+                    return c2 - c1; // Sort descending (most exhausted console evaluated first)
+                });
+            }
+            order.unshift('TSO'); // Always process Supervisor first
             
             for (let pos of order) {
                 if (rosterGrid[slot][pos] !== null) continue;
@@ -489,7 +500,6 @@
 
                 // THE STAGGER MATRIX SCORING
                 let scoredPool = pool.map(a => {
-                    // Add a random 0-9 tie-breaker to shuffle candidates with identical workloads
                     let score = (a.minsWorked * 10) + Math.floor(Math.random() * 10);
                     
                     let legalHours = (pos === 'TSO') ? true : (a.continuousSlots < 4);
@@ -504,9 +514,6 @@
                     if (a.lastPosition === pos && legalHours) score -= 10000; 
 
                     // --- THE STAGGER MATRIX ---
-                    // Incrementally breaks the Continuation Bonus before the 2hr limit hits.
-                    // This guarantees that a rested person (Score = 0) will naturally swap out the ATCO 
-                    // who has been sitting the longest, preventing simultaneous exhaustion!
                     if (pos !== 'TSO') {
                         if (a.continuousSlots === 1) score += 0;       // Stays (Score = -10,000)
                         if (a.continuousSlots === 2) score += 10500;   // 1 hour.   Score = +500 (Swaps if rested person available!)
