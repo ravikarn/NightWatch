@@ -350,4 +350,409 @@
             let prefOpts = document.getElementById('preferred-slots').selectedOptions;
             preferredSlots = Array.from(prefOpts).map(o => parseInt(o.value));
             preferredPosition = document.getElementById('preferred-position').value;
-            if (preferredSlots.leng
+            if (preferredSlots.length === 0) return alert("Special ATCOs must have at least one preferred slot.");
+        } else {
+            let avoidOpts = document.getElementById('avoid-slots').selectedOptions;
+            avoidSlots = Array.from(avoidOpts).map(o => parseInt(o.value));
+            isTso = document.getElementById('primary-tso').checked;
+        }
+
+        atcos.push({
+            id: Date.now().toString(),
+            name,
+            category,
+            isTso,
+            avoidSlots,
+            preferredSlots,
+            preferredPosition,
+            minsWorked: 0,
+            continuousSlots: 0,
+            lastPosition: null,
+            workedBlocks: []
+        });
+
+        nameInput.value = '';
+        Array.from(document.getElementById('avoid-slots').options).forEach(opt => opt.selected = false);
+        Array.from(document.getElementById('preferred-slots').options).forEach(opt => opt.selected = false);
+        document.getElementById('primary-tso').checked = false;
+        handleTsoChange(); 
+        renderATCOList();
+    }
+
+    function removeATCO(id) {
+        atcos = atcos.filter(a => a.id !== id);
+        renderATCOList();
+    }
+
+    function toggleShift(id) {
+        let atco = atcos.find(a => a.id === id);
+        if (atco && atco.category !== 'special') {
+            atco.category = atco.category === 'firstHalf' ? 'secondHalf' : 'firstHalf';
+            renderATCOList();
+        }
+    }
+
+    function renderATCOList() {
+        const tbody = document.getElementById('atco-list-body');
+        const emptyState = document.getElementById('empty-state');
+        tbody.innerHTML = '';
+        
+        if (atcos.length === 0) {
+            emptyState.classList.remove('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+            atcos.forEach(atco => {
+                let badge = atco.category === 'special' ? 
+                    '<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200">Special</span>' : 
+                    `<span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${atco.category === 'firstHalf' ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200' : 'bg-indigo-100 dark:bg-indigo-900/50 text-indigo-800 dark:text-indigo-200'}">${atco.category === 'firstHalf' ? 'First Half' : 'Second Half'}</span>`;
+                
+                let tsoBadge = atco.isTso ? '<span class="text-green-600 font-bold">✓</span>' : '<span class="text-gray-400 dark:text-gray-600 font-bold">-</span>';
+                
+                let slotsStr = '';
+                let slotsClass = '';
+                
+                if (atco.category === 'special') {
+                    slotsStr = atco.preferredSlots.length > 0 ? `${atco.preferredPosition}: ${atco.preferredSlots.join(', ')}` : '-';
+                    slotsClass = atco.preferredSlots.length > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-600 font-bold';
+                } else {
+                    slotsStr = atco.avoidSlots.length > 0 ? atco.avoidSlots.join(', ') : '-';
+                    slotsClass = atco.avoidSlots.length > 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-600 font-bold';
+                }
+                
+                let slotsDisplay = `<span class="font-semibold text-xs block truncate w-full ${slotsClass}" title="${slotsStr}">${slotsStr}</span>`;
+
+                let actionButtons = `<button onclick="removeATCO('${atco.id}')" class="text-red-600 dark:text-red-400 font-bold hover:underline mr-4 focus:outline-none cursor-pointer">Remove</button>`;
+
+                if (atco.category !== 'special') {
+                    let isSecondHalf = atco.category === 'secondHalf';
+                    actionButtons += `
+                        <button onclick="toggleShift('${atco.id}')" title="Swap First/Second Half" class="relative inline-flex items-center h-6 w-12 rounded-full transition-colors focus:outline-none shadow-inner cursor-pointer ${isSecondHalf ? 'bg-indigo-500' : 'bg-blue-400 dark:bg-blue-500'}">
+                            <span class="absolute left-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'block' : 'hidden'}">SH</span>
+                            <span class="absolute right-1.5 text-[10px] font-bold text-white select-none ${isSecondHalf ? 'hidden' : 'block'}">FH</span>
+                            <span class="inline-block z-10 w-4 h-4 transform bg-white rounded-full shadow transition-transform ${isSecondHalf ? 'translate-x-7' : 'translate-x-1'}"></span>
+                        </button>
+                    `;
+                }
+                
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100 truncate" title="${atco.name}">${atco.name}</td>
+                        <td class="px-4 py-2 whitespace-nowrap">${badge}</td>
+                        <td class="px-2 py-2 whitespace-nowrap text-center">${tsoBadge}</td>
+                        <td class="px-4 py-2 whitespace-nowrap">${slotsDisplay}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm">
+                            <div class="flex items-center">
+                                ${actionButtons}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+    }
+
+    // --- Core Unified Solver Engine ---
+    function generateRoster() {
+        if (atcos.length === 0) return alert("Add at least one ATCO.");
+
+        rosterGrid = Array.from({length: 24}, () => ({ TWR: null, SMC: null, CLD: null, TSO: null }));
+        generationLogs = { fallbacks: 0, details: [] };
+        
+        atcos.forEach(a => {
+            a.minsWorked = 0;
+            a.continuousSlots = 0;
+            a.lastPosition = null;
+        });
+
+        for (let slot = 0; slot < 24; slot++) {
+            
+            // 1. Process SPECIAL ATCOs first (Immune to all rules)
+            let specialCandidates = atcos.filter(a => a.category === 'special' && a.preferredSlots.includes(slot));
+            specialCandidates.forEach(sp => {
+                if (POSITIONS.includes(sp.preferredPosition) && sp.preferredPosition !== 'TSO') {
+                    rosterGrid[slot][sp.preferredPosition] = sp;
+                    updateStateAssign(sp, sp.preferredPosition);
+                }
+            });
+
+            // 2. Evaluate Order exactly as requested: TSO, TWR, SMC, CLD
+            const order = ['TSO', 'TWR', 'SMC', 'CLD'];
+            
+            for (let pos of order) {
+                if (rosterGrid[slot][pos] !== null) continue;
+
+                // Base pool excludes special ATCOs
+                let pool = atcos.filter(a => a.category !== 'special');
+
+                // RULE: NO DOUBLE MANNING
+                let assignedThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null);
+                pool = pool.filter(a => !assignedThisSlot.includes(a));
+
+                // Restrict TSO console to qualified staff
+                if (pos === 'TSO') pool = pool.filter(a => a.isTso);
+
+                // Physical constraint failure
+                if (pool.length === 0) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-red-500 font-bold bg-red-100 dark:bg-red-900/50 px-1 rounded">[Slot ${slot}] UNMANNED CONSOLE: Insufficient staff available for ${pos}</span>`);
+                    continue; 
+                }
+
+                // UNIFIED PENALTY SCORING
+                let scoredPool = pool.map(a => {
+                    let score = a.minsWorked * 1000;
+                    
+                    let legalHours = (pos === 'TSO') ? true : (a.continuousSlots < 4);
+                    let legalBreak = true;
+                    if (a.lastPosition !== null && a.lastPosition !== pos && a.continuousSlots > 0) legalBreak = false;
+                    
+                    // RULE: TIMELINE SEGREGATION
+                    let isWrongHalf = false;
+                    if (slot >= 8 && slot <= 15 && a.category === 'secondHalf') isWrongHalf = true;
+                    if (slot >= 16 && slot <= 23 && a.category === 'firstHalf') isWrongHalf = true;
+
+                    // ORGANIC STAGGERING BONUS: Tuned to exactly -30000 to perfectly rotate ATCOs without exhaustion
+                    if (a.lastPosition === pos && legalHours) score -= 30000; 
+
+                    // Apply Progressive Penalties
+                    let avoids = a.avoidSlots.includes(slot);
+                    if (avoids) score += 500000;            // Tier 1.5 
+                    if (!legalBreak) score += 2000000;      // Tier 2 
+                    if (!legalHours) score += 5000000;      // Tier 3 
+                    if (isWrongHalf) score += 10000000;     // Tier 4 (Emergency to avoid Unmanned console)
+
+                    return { atco: a, score, legalBreak, legalHours, avoids, isWrongHalf };
+                });
+
+                scoredPool.sort((a, b) => a.score - b.score);
+                let best = scoredPool[0];
+
+                rosterGrid[slot][pos] = best.atco;
+                updateStateAssign(best.atco, pos);
+
+                // Log the exact rule that was bypassed to get a body in the seat
+                if (best.isWrongHalf) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-purple-500 dark:text-purple-400 font-bold">[Slot ${slot}] Segregation Override: ${best.atco.name} pulled from off-shift to man ${pos}</span>`);
+                } else if (!best.legalHours) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-red-500 dark:text-red-400 font-bold">[Slot ${slot}] Exhaustion Override: ${best.atco.name} breached 2hr limit on ${pos}</span>`);
+                } else if (!best.legalBreak) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-yellow-500 dark:text-yellow-400 font-bold">[Slot ${slot}] Break Override: ${best.atco.name} forced to ${pos}</span>`);
+                } else if (best.avoids) {
+                    generationLogs.fallbacks++;
+                    generationLogs.details.push(`<span class="text-orange-500 dark:text-orange-400">[Slot ${slot}] Avoid Override: ${best.atco.name} mapped to avoided slot for ${pos}</span>`);
+                }
+            }
+        }
+        renderRosterUI();
+        renderLogs();
+    }
+
+    function updateStateAssign(atco, pos) {
+        atco.minsWorked += 30;
+        atco.continuousSlots += 1;
+        atco.lastPosition = pos;
+    }
+
+    // --- UI Rendering ---
+    function renderLogs() {
+        const container = document.getElementById('logs-container');
+        container.classList.remove('hidden');
+        document.getElementById('log-fallbacks').innerText = generationLogs.fallbacks;
+        
+        const detailsUl = document.getElementById('log-details');
+        if (generationLogs.details.length === 0) {
+            detailsUl.innerHTML = '<li class="text-green-500 dark:text-green-400 font-bold">Perfect compilation. 0 Rule Overrides.</li>';
+        } else {
+            detailsUl.innerHTML = generationLogs.details.map(d => `<li>${d}</li>`).join('');
+        }
+        document.getElementById('export-btn').classList.remove('hidden');
+    }
+
+    function renderRosterUI() {
+        const tbody = document.getElementById('roster-table-body');
+        tbody.innerHTML = '';
+        let skipMap = {};
+        
+        for (let r = 0; r < 24; r++) {
+            let tr = document.createElement('tr');
+            tr.className = r % 2 === 0 ? 'bg-white dark:bg-gray-800' : 'bg-gray-50 dark:bg-gray-800/80';
+            
+            let tdTime = document.createElement('td');
+            tdTime.className = "px-6 py-2 border border-gray-200 dark:border-gray-600 whitespace-nowrap text-xs font-medium text-gray-900 dark:text-gray-100 bg-gray-100 dark:bg-gray-700";
+            tdTime.innerText = getSlotTimeRange(r);
+            tr.appendChild(tdTime);
+
+            const order = ['TWR', 'SMC', 'CLD', 'TSO'];
+            for (let c = 0; c < 4; c++) {
+                let pos = order[c];
+                if (skipMap[`${r},${c}`]) continue;
+
+                let atco = rosterGrid[r][pos];
+                let td = document.createElement('td');
+                td.className = "border border-gray-200 dark:border-gray-600 text-center text-xs font-bold p-0 relative h-10";
+                
+                if (atco) {
+                    let span = 1;
+                    for (let nextR = r + 1; nextR < 24; nextR++) {
+                        if (rosterGrid[nextR][pos] === atco) {
+                            span++;
+                            skipMap[`${nextR},${c}`] = true;
+                        } else break;
+                    }
+                    
+                    td.rowSpan = span;
+                    let startTime = getSlotTimeRaw(r);
+                    let endTime = getSlotTimeRaw(r + span);
+                    let colorCode = stringToColorHex(atco.name);
+                    
+                    td.innerHTML = `
+                        <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm text-gray-900" style="background-color: ${colorCode}40; border-left: 4px solid ${colorCode}">
+                            <span class="text-[10px] opacity-80 block mb-1">${startTime} - ${endTime}</span>
+                            <span>${atco.name}</span>
+                        </div>
+                    `;
+                } else {
+                    td.innerHTML = `<span class="text-gray-300 dark:text-gray-600">-</span>`;
+                }
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        }
+        document.getElementById('roster-view-container').classList.remove('hidden');
+        calculateViewData();
+    }
+
+    function calculateViewData() {
+        atcos.forEach(a => a.workedBlocks = []);
+        const order = ['TWR', 'SMC', 'CLD', 'TSO'];
+        
+        for (let a of atcos) {
+            for (let pos of order) {
+                let startSlot = -1;
+                for (let r = 0; r <= 24; r++) {
+                    let isWorking = r < 24 && rosterGrid[r][pos] === a;
+                    if (isWorking && startSlot === -1) startSlot = r;
+                    else if (!isWorking && startSlot !== -1) {
+                        a.workedBlocks.push({
+                            pos: pos,
+                            start: getSlotTimeRaw(startSlot),
+                            end: getSlotTimeRaw(r),
+                            startIndex: startSlot 
+                        });
+                        startSlot = -1;
+                    }
+                }
+            }
+            a.workedBlocks.sort((b1, b2) => b1.startIndex - b2.startIndex);
+        }
+    }
+
+    // --- PDF Export Logic ---
+    function stringToPastelRGB(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        let r = (hash & 0xFF0000) >> 16;
+        let g = (hash & 0x00FF00) >> 8;
+        let b = hash & 0x0000FF;
+        return [Math.floor((r + 255) / 2), Math.floor((g + 255) / 2), Math.floor((b + 255) / 2)];
+    }
+
+    function stringToColorHex(str) {
+        let rgb = stringToPastelRGB(str);
+        return "#" + rgb.map(x => x.toString(16).padStart(2, '0')).join('');
+    }
+
+    function exportPDF() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setFontSize(16);
+        doc.text("Night's Watch Duty Roster", 14, 15);
+        doc.setFontSize(10);
+        doc.setTextColor(100);
+        doc.text("Created by Ravi S Karn", 14, 21);
+
+        const order = ['TWR', 'SMC', 'CLD', 'TSO'];
+        let body = [];
+        let skipMap = {};
+
+        for (let r = 0; r < 24; r++) {
+            let row = [getSlotTimeRange(r)];
+            for (let c = 0; c < 4; c++) {
+                if (skipMap[`${r},${c}`]) continue;
+                
+                let pos = order[c];
+                let atco = rosterGrid[r][pos];
+                
+                if (atco) {
+                    let span = 1;
+                    for (let nextR = r + 1; nextR < 24; nextR++) {
+                        if (rosterGrid[nextR][pos] === atco) {
+                            span++;
+                            skipMap[`${nextR},${c}`] = true;
+                        } else break;
+                    }
+                    
+                    let startTime = getSlotTimeRaw(r);
+                    let endTime = getSlotTimeRaw(r + span);
+                    let content = `${startTime}-${endTime}\n${atco.name}`;
+                    let color = stringToPastelRGB(atco.name);
+                    
+                    row.push({
+                        content: content,
+                        rowSpan: span,
+                        styles: { fillColor: color, halign: 'center', valign: 'middle', fontStyle: 'bold' }
+                    });
+                } else {
+                    row.push("");
+                }
+            }
+            body.push(row);
+        }
+
+        doc.autoTable({
+            startY: 28,
+            head: [['Time (UTC)', 'TWR', 'SMC', 'CLD', 'TSO']],
+            body: body,
+            theme: 'grid',
+            styles: { fontSize: 8, cellPadding: 1, lineColor: [200, 200, 200] },
+            headStyles: { fillColor: [50, 50, 50], textColor: [255, 255, 255], halign: 'center' },
+            columnStyles: { 0: { halign: 'center', fontStyle: 'bold', fillColor: [245, 245, 245] } },
+            margin: { top: 10, bottom: 10, left: 14, right: 14 }
+        });
+
+        let finalY = doc.lastAutoTable.finalY + 10;
+        doc.setFontSize(14);
+        doc.setTextColor(0);
+        doc.text("ATCO Deployment Summary", 14, finalY);
+        
+        let summaryBody = atcos.map(a => {
+            let blocksStr = a.workedBlocks.map(b => `${b.pos} (${b.start}-${b.end})`).join(', ');
+            let formattedCategory = a.category === 'firstHalf' ? 'FIRST HALF' : 
+                                    a.category === 'secondHalf' ? 'SECOND HALF' : 'SPECIAL';
+            return [
+                a.name, 
+                formattedCategory, 
+                `${a.minsWorked} mins`, 
+                blocksStr || "No duties assigned"
+            ];
+        });
+
+        doc.autoTable({
+            startY: finalY + 5,
+            head: [['ATCO Name', 'Category', 'Total Load', 'Assigned Blocks']],
+            body: summaryBody,
+            theme: 'striped',
+            styles: { fontSize: 8, cellPadding: 2 },
+            headStyles: { fillColor: [70, 70, 100] }
+        });
+
+        doc.save('ATCO_Duty_Roster.pdf');
+    }
+</script>
+
+</body>
+</html>
