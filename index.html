@@ -698,7 +698,15 @@
         const doc = new jsPDF();
         
         doc.setFontSize(16); doc.text("Night's Watch Duty Roster", 14, 15);
-        doc.setFontSize(10); doc.setTextColor(100); doc.text("Prepared by Ravi S Karn", 14, 21);
+        
+        // Add generation date/time aligned to the right side
+        const now = new Date();
+        const timeStr = "Generated: " + now.toLocaleString();
+        
+        doc.setFontSize(10); 
+        doc.setTextColor(100); 
+        doc.text("Prepared by Ravi S Karn", 14, 21);
+        doc.text(timeStr, 196, 21, { align: 'right' }); // Right-aligned time string
 
         const order = ['TWR', 'SMC', 'CLD', 'TSO'];
         let body = [], skipMap = {};
