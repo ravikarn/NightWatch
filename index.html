@@ -199,6 +199,7 @@
     let rosterGrid = [];
     let generationLogs = { fallbacks: 0, details: [] };
     const POSITIONS = ['TWR', 'SMC', 'CLD', 'TSO'];
+    const DUMMY_COMBINED = { name: 'COMBINED', isDummy: true }; // Special constant for SMC/CLD combination
     
     function getSlotTimeRaw(index) {
         let totalMins = 13 * 60 + 30 + (index * 30);
@@ -226,19 +227,17 @@
             setupCustomSelect('preferred-slots', true);
         }
 
-        // PRE-LOAD THE PERFECT 10 SAMPLE (A-E First Half, F-J Second Half, 1 TSO each)
+        // PRE-LOAD THE LOW-MANPOWER 8 SAMPLE (A-D First Half, F-I Second Half - Exposes Combined Logic)
         if (atcos.length === 0) {
             const sampleSet = [
                 { name: 'A', cat: 'firstHalf', tso: true },
                 { name: 'B', cat: 'firstHalf', tso: false },
                 { name: 'C', cat: 'firstHalf', tso: false },
                 { name: 'D', cat: 'firstHalf', tso: false },
-                { name: 'E', cat: 'firstHalf', tso: false },
                 { name: 'F', cat: 'secondHalf', tso: true },
                 { name: 'G', cat: 'secondHalf', tso: false },
                 { name: 'H', cat: 'secondHalf', tso: false },
-                { name: 'I', cat: 'secondHalf', tso: false },
-                { name: 'J', cat: 'secondHalf', tso: false }
+                { name: 'I', cat: 'secondHalf', tso: false }
             ];
 
             sampleSet.forEach(s => {
@@ -456,7 +455,20 @@
             a.lastPosition = null;
         });
 
+        // Pre-calculate baseline manpower counts for dynamic combining logic
+        let fhNonTso = atcos.filter(a => a.category === 'firstHalf' && !a.isTso && a.category !== 'special').length;
+        let shNonTso = atcos.filter(a => a.category === 'secondHalf' && !a.isTso && a.category !== 'special').length;
+
         for (let slot = 0; slot < 24; slot++) {
+            
+            // Assess effective non-TSO workforce available for the current slot
+            let activeNonTso = 0;
+            if (slot >= 0 && slot <= 7) activeNonTso = fhNonTso + shNonTso; // Common overlap period
+            else if (slot >= 8 && slot <= 15) activeNonTso = fhNonTso;      // First half exclusive
+            else activeNonTso = shNonTso;                                   // Second half exclusive
+
+            // If 3 or fewer non-TSO operators are available, we must structurally combine SMC and CLD
+            let combineSmcCld = activeNonTso <= 3;
             
             // 1. Process Special ATCOs first
             let specialCandidates = atcos.filter(a => a.category === 'special' && a.preferredSlots.includes(slot));
@@ -468,26 +480,29 @@
             });
 
             // 2. Dynamic User Hierarchy (Prioritize most exhausted consoles)
-            // By dynamically sorting the evaluation order based on the previous slot's continuous workload, 
-            // the system ensures the console closest to the 2-hour exhaustion limit always gets first pick 
-            // of the rested personnel, completely eliminating the Greedy Allocation Trap.
             let order = ['TWR', 'SMC', 'CLD'];
             if (slot > 0) {
                 order.sort((p1, p2) => {
                     let a1 = rosterGrid[slot-1][p1];
                     let a2 = rosterGrid[slot-1][p2];
-                    let c1 = a1 ? a1.continuousSlots : 0;
-                    let c2 = a2 ? a2.continuousSlots : 0;
-                    return c2 - c1; // Sort descending (most exhausted console evaluated first)
+                    let c1 = (a1 && !a1.isDummy) ? a1.continuousSlots : 0;
+                    let c2 = (a2 && !a2.isDummy) ? a2.continuousSlots : 0;
+                    return c2 - c1; 
                 });
             }
-            order.unshift('TSO'); // Always process Supervisor first
+            order.unshift('TSO'); 
             
             for (let pos of order) {
                 if (rosterGrid[slot][pos] !== null) continue;
 
+                // Execute exceptional COMBINED rule 
+                if (combineSmcCld && pos === 'CLD') {
+                    rosterGrid[slot][pos] = DUMMY_COMBINED;
+                    continue;
+                }
+
                 let pool = atcos.filter(a => a.category !== 'special');
-                let assignedThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null);
+                let assignedThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null && !v.isDummy);
                 pool = pool.filter(a => !assignedThisSlot.includes(a));
 
                 if (pos === 'TSO') pool = pool.filter(a => a.isTso);
@@ -510,21 +525,17 @@
                     if (slot >= 8 && slot <= 15 && a.category === 'secondHalf') isWrongHalf = true;
                     if (slot >= 16 && slot <= 23 && a.category === 'firstHalf') isWrongHalf = true;
 
-                    // MASSIVE CONTINUATION BONUS: Lock them to the console (-10,000)
                     if (a.lastPosition === pos && legalHours) score -= 10000; 
 
-                    // --- THE STAGGER MATRIX ---
                     if (pos !== 'TSO') {
-                        if (a.continuousSlots === 1) score += 0;       // Stays (Score = -10,000)
-                        if (a.continuousSlots === 2) score += 10500;   // 1 hour.   Score = +500 (Swaps if rested person available!)
-                        if (a.continuousSlots === 3) score += 15000;   // 1.5 hour. Score = +5000 (Aggressively forced swap)
-                        if (a.continuousSlots >= 4)  score += 30000;   // 2 hour.   Score = +20000 (Exhaustion cliff)
+                        if (a.continuousSlots === 1) score += 0;       
+                        if (a.continuousSlots === 2) score += 10500;   
+                        if (a.continuousSlots === 3) score += 15000;   
+                        if (a.continuousSlots >= 4)  score += 30000;   
                     }
 
-                    // TSO PRESERVATION: Heavily penalize pulling TSOs onto normal consoles
                     if (pos !== 'TSO' && a.isTso) score += 100000;
 
-                    // EMERGENCY PENALTIES (Tier Cascade)
                     let avoids = a.avoidSlots.includes(slot);
                     if (avoids) score += 500000;            
                     if (!legalBreak) score += 2000000;      
@@ -540,7 +551,6 @@
                 rosterGrid[slot][pos] = best.atco;
                 updateStateAssign(best.atco, pos);
 
-                // Log the exact rule that was bypassed
                 if (best.isWrongHalf) {
                     generationLogs.fallbacks++;
                     generationLogs.details.push(`<span class="text-purple-500 dark:text-purple-400 font-bold">[Slot ${slot}] Segregation Override: ${best.atco.name} pulled from off-shift to man ${pos}</span>`);
@@ -554,17 +564,17 @@
                     generationLogs.fallbacks++;
                     generationLogs.details.push(`<span class="text-orange-500 dark:text-orange-400">[Slot ${slot}] Avoid Override: ${best.atco.name} mapped to avoided slot for ${pos}</span>`);
                 }
-            } // End of position assignment loop
+            } 
 
-            // BUG FIX: Reset continuous slots for any employee who rested during this interval
-            let workingThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null);
+            // Reset continuous slots for rested operators
+            let workingThisSlot = Object.values(rosterGrid[slot]).filter(v => v !== null && !v.isDummy);
             atcos.forEach(a => {
                 if (!workingThisSlot.includes(a)) {
                     a.continuousSlots = 0;
                 }
             });
 
-        } // End of slot loop
+        } 
         renderRosterUI();
         renderLogs();
     }
@@ -624,14 +634,23 @@
                     td.rowSpan = span;
                     let startTime = getSlotTimeRaw(r);
                     let endTime = getSlotTimeRaw(r + span);
-                    let colorCode = stringToColorHex(atco.name);
                     
-                    td.innerHTML = `
-                        <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm text-gray-900" style="background-color: ${colorCode}40; border-left: 4px solid ${colorCode}">
-                            <span class="text-[10px] opacity-80 block mb-1">${startTime} - ${endTime}</span>
-                            <span>${atco.name}</span>
-                        </div>
-                    `;
+                    if (atco.isDummy) {
+                        td.innerHTML = `
+                            <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm bg-gray-200 dark:bg-gray-700 border-l-4 border-gray-400 text-gray-500 dark:text-gray-400">
+                                <span class="text-[10px] opacity-80 block mb-1">${startTime} - ${endTime}</span>
+                                <span class="font-bold text-xs text-center leading-tight">COMBINED<br/>W/ SMC</span>
+                            </div>
+                        `;
+                    } else {
+                        let colorCode = stringToColorHex(atco.name);
+                        td.innerHTML = `
+                            <div class="h-full w-full flex flex-col items-center justify-center p-2 rounded-sm text-gray-900" style="background-color: ${colorCode}40; border-left: 4px solid ${colorCode}">
+                                <span class="text-[10px] opacity-80 block mb-1">${startTime} - ${endTime}</span>
+                                <span>${atco.name}</span>
+                            </div>
+                        `;
+                    }
                 } else {
                     td.innerHTML = `<span class="text-gray-300 dark:text-gray-600">-</span>`;
                 }
@@ -695,7 +714,11 @@
                     for (let nextR = r + 1; nextR < 24; nextR++) {
                         if (rosterGrid[nextR][pos] === atco) { span++; skipMap[`${nextR},${c}`] = true; } else break;
                     }
-                    row.push({ content: `${getSlotTimeRaw(r)}-${getSlotTimeRaw(r + span)}\n${atco.name}`, rowSpan: span, styles: { fillColor: stringToPastelRGB(atco.name), halign: 'center', valign: 'middle', fontStyle: 'bold' } });
+                    if (atco.isDummy) {
+                        row.push({ content: `${getSlotTimeRaw(r)}-${getSlotTimeRaw(r + span)}\nCOMBINED`, rowSpan: span, styles: { fillColor: [230, 230, 230], textColor: [120, 120, 120], halign: 'center', valign: 'middle', fontStyle: 'italic' } });
+                    } else {
+                        row.push({ content: `${getSlotTimeRaw(r)}-${getSlotTimeRaw(r + span)}\n${atco.name}`, rowSpan: span, styles: { fillColor: stringToPastelRGB(atco.name), halign: 'center', valign: 'middle', fontStyle: 'bold' } });
+                    }
                 } else row.push("");
             }
             body.push(row);
