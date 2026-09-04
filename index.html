@@ -209,6 +209,10 @@
     }
 
     function getSlotTimeRange(index) {
+        return `${getSlotTimeRange(index)}-${getSlotTimeRaw(index + 1)}`;
+    }
+
+    function getSlotTimeRange(index) {
         return `${getSlotTimeRaw(index)}-${getSlotTimeRaw(index + 1)}`;
     }
 
@@ -699,14 +703,18 @@
         
         doc.setFontSize(16); doc.text("Night's Watch Duty Roster", 14, 15);
         
-        // Add generation date/time aligned to the right side
+        // Formatting the date to explicitly place Date before Month (DD MMM YYYY, Time)
         const now = new Date();
-        const timeStr = "Generated: " + now.toLocaleString();
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = now.toLocaleString('default', { month: 'short' }); 
+        const year = now.getFullYear();
+        const time = now.toLocaleTimeString();
+        const timeStr = `Generated: ${day} ${month} ${year}, ${time}`;
         
         doc.setFontSize(10); 
         doc.setTextColor(100); 
         doc.text("Prepared by Ravi S Karn", 14, 21);
-        doc.text(timeStr, 196, 21, { align: 'right' }); // Right-aligned time string
+        doc.text(timeStr, 196, 21, { align: 'right' }); 
 
         const order = ['TWR', 'SMC', 'CLD', 'TSO'];
         let body = [], skipMap = {};
